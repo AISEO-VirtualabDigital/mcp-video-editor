@@ -1,0 +1,13 @@
+# Codex CLI — add to ~/.codex/config.toml
+# Docs: https://github.com/openai/codex/blob/main/docs/config.md
+#
+# The Codex CLI and Codex VS Code extension share this config file.
+
+[mcp_servers.video-editor]
+command = "node"
+args = ["C:\\Users\\YOUR_USERNAME\\mcp-video-editor\\dist\\index.js"]
+
+[mcp_servers.video-editor.env]
+MCP_VIDEO_BACKUP_DIR = "C:\\Users\\YOUR_USERNAME\\.mcp-video-editor\\backups"
+MCP_VIDEO_EXPORT_DIR = "C:\\Users\\YOUR_USERNAME\\Videos\\mcp-video-editor"
+OPENCUT_PROJECTS_DIR = "C:\\Users\\YOUR_USERNAME\\Documents\\OpenCut\\projects"

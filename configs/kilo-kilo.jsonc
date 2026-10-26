@@ -1,0 +1,17 @@
+{
+  "$schema": "https://kilo.ai/kilo.schema.json",
+  "mcpServers": {
+    "video-editor": {
+      "command": "node",
+      "args": ["C:\\Users\\YOUR_USERNAME\\mcp-video-editor\\dist\\index.js"],
+      "env": {
+        "MCP_VIDEO_BACKUP_DIR": "C:\\Users\\YOUR_USERNAME\\.mcp-video-editor\\backups",
+        "MCP_VIDEO_EXPORT_DIR": "C:\\Users\\YOUR_USERNAME\\Videos\\mcp-video-editor",
+        "OPENCUT_PROJECTS_DIR": "C:\\Users\\YOUR_USERNAME\\Documents\\OpenCut\\projects"
+      },
+      "disabled": false,
+      "alwaysAllow": [],
+      "timeout": 60
+    }
+  }
+}

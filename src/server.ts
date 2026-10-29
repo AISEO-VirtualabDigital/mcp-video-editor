@@ -44,7 +44,7 @@ export function buildServer(): ServerContext {
         logging: {},
       },
       instructions:
-        "MCP server for editing videos in CapCut and OpenCut. All write tools default to dryRun=true — pass dryRun=false to persist. Time units are microseconds (1_000_000 = 1s).",
+        "MCP server for editing videos in CapCut and OpenCut, plus programmatic video creation via Remotion/HyperFrames. All write tools default to dryRun=true — pass dryRun=false to persist. Time units are microseconds (1_000_000 = 1s). Use create_video to author a new video from a generation spec, render_project to render it to MP4, and list_shots/get_shot to browse the motion shot library.",
     },
   );
 
@@ -115,7 +115,7 @@ function registerToolWithMcp(mcp: McpServer, tool: Tool): void {
       inputSchema: shape as Record<string, never>,
       annotations: {
         // Hint clients that these tools can be slow (render, save).
-        readOnlyHint: tool.name.startsWith("get_") || tool.name === "list_projects" || tool.name === "list_export_profiles",
+        readOnlyHint: tool.name.startsWith("get_") || tool.name.startsWith("list_"),
         destructiveHint: tool.name === "delete_project",
         idempotentHint: false,
         openWorldHint: true,

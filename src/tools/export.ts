@@ -58,7 +58,7 @@ const listRenderTasksSchema = z.object({
   id: z.string().min(1).optional().describe("Filter by project id."),
 });
 
-interface RenderTask {
+export interface RenderTask {
   id: string;
   projectId: string;
   profile: ExportProfile;
@@ -71,18 +71,18 @@ interface RenderTask {
   error?: string;
 }
 
-function renderTasksDir(): string {
+export function renderTasksDir(): string {
   return path.join(exportRoot(), "tasks");
 }
 
-async function readTask(id: string): Promise<RenderTask | null> {
+export async function readTask(id: string): Promise<RenderTask | null> {
   const p = path.join(renderTasksDir(), `${id}.json`);
   const st = await safeStat(p);
   if (!st) return null;
   return await readJson<RenderTask>(p);
 }
 
-async function writeTask(task: RenderTask): Promise<void> {
+export async function writeTask(task: RenderTask): Promise<void> {
   await ensureDir(renderTasksDir());
   await writeJson(path.join(renderTasksDir(), `${task.id}.json`), task);
 }

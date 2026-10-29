@@ -1,6 +1,6 @@
 # Tool Reference
 
-All 50 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
+All 54 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
 
 ## Project management
 
@@ -64,6 +64,20 @@ All 50 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | `split_audio` | `id`, `trackId`, `clipId`, `at`, `dryRun=true` |
 | `denoise` | `id`, `trackId`, `clipId`, `enable=true`, `dryRun=true` |
 
+## Generation & rendering
+
+| Tool | Args | Returns | Notes |
+| --- | --- | --- | --- |
+| `create_video` | `name`, `editor`, `engine`, `width=1920`, `height=1080`, `fps=30`, `durationInSeconds`, `clips?`, `texts?`, `audio?`, `dryRun=true` | `{ id, name, editor, engine, duration, width, height, fps, tracks, materials, texts, filePath }` | Creates a new video project from a programmatic generation spec (Remotion or HyperFrames engine). When `engine="hyperframes"`, a `index.html` composition scaffold is written into the project folder. |
+| `render_project` | `id`, `engine`, `entry?`, `compositionId?`, `outputPath?`, `dryRun=true` | `{ taskId, projectId, engine, outputPath, phase }` | Spawns the backend renderer (`npx remotion render` or `npx hyperframes render`), streams progress, writes output under the export root. |
+
+## Shot library
+
+| Tool | Args | Returns | Notes |
+| --- | --- | --- | --- |
+| `list_shots` | `category?` | `{ categories, shots, count }` | Read-only; lists motion shot categories + cards |
+| `get_shot` | `shotId` | `{ shot: ShotCard }` | Read-only; returns a single shot card |
+
 ## Export & render
 
 | Tool | Args | Returns |
@@ -73,6 +87,8 @@ All 50 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | `export_project` | `id`, `profileName?`, `outputPath?`, `dryRun=true` | `{ taskId, projectId, profile, outputPath, phase? }`; records a queued request only, no video is rendered |
 | `get_render_status` | `taskId` | Full `RenderTask` |
 | `list_render_tasks` | `id?` | `{ tasks: RenderTask[] }` |
+
+> Note: `export_project` remains a queued-request stub. `render_project` is the backend-driven render entry point that actually spawns a renderer.
 
 Export profiles:
 
@@ -105,7 +121,7 @@ Every write tool has a `dryRun` parameter that defaults to `true`. Behavior:
 - `dryRun=false`: the project is mutated AND persisted to disk. A backup is created first (`~/.mcp-video-editor/backups/...`). A `notifications/projectChanged` notification is emitted.
 - Video/audio source paths must refer to existing regular files in both dry-run and live calls. Dry-run checks the source but does not write the project.
 - Invalid timeline edits are discarded without changing the open project cache. Clips may not overlap on the same track.
-- Export requests are not renders: without a connected renderer, live requests remain queued and no video file is created. Unknown preset names are rejected instead of silently falling back.
+- Export requests are not renders: without a connected renderer, live requests remain queued and no video file is created. `render_project` is the backend-driven path that spawns a real renderer. Unknown preset names are rejected instead of silently falling back.
 
 ## Tool result shape
 

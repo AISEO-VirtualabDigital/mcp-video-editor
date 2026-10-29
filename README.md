@@ -14,9 +14,11 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Transitions / effects | `add_transition`, `remove_transition`, `add_filter`, `add_effect`, `remove_effect`, `add_sticker`, `add_animation` | ✅ | ✅ |
 | Audio | `add_audio_clip`, `adjust_volume`, `adjust_track_volume`, `fade_in`, `fade_out`, `split_audio`, `denoise` | ✅ | ✅ |
 | Export & render | `list_export_profiles`, `set_export_params`, `export_project`, `get_render_status`, `list_render_tasks` | ✅ | ✅ |
+| Generation & rendering | `create_video`, `render_project` | ✅ | ✅ |
+| Shot library | `list_shots`, `get_shot` | ✅ | ✅ |
 | Inspect / query | `get_project_state`, `get_timeline`, `get_clips`, `get_track_info`, `get_materials`, `get_texts`, `get_effects`, `get_open_project_ids` | ✅ | ✅ |
 
-**50 tools total**, all of which honor `dryRun: true` by default (the safe setting).
+**54 tools total**, all of which honor `dryRun: true` by default (the safe setting).
 
 ## How it works
 
@@ -128,7 +130,7 @@ mcp-video-editor/
 ├── src/
 │   ├── index.ts                 # Entry point
 │   ├── server.ts                # MCP server setup + tool registration
-│   ├── tools/                   # 50 tools across 7 categories
+│   ├── tools/                   # 54 tools across 9 categories
 │   │   ├── index.ts              # Tool registry
 │   │   ├── project.ts           # list/create/open/close/save/duplicate/delete
 │   │   ├── timeline.ts          # tracks, clips, splits, trims, speed, volume, visibility
@@ -186,7 +188,7 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **CapCut has no official API.** This server reads/writes CapCut's `draft_content.json` directly. CapCut must be **closed** (or at least not actively editing the same draft) when you call `save_project` with `dryRun: false`, otherwise the file may be locked — the server retries 3× on `EBUSY` but may still fail.
 - **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw`, so round-tripping older drafts is generally safe, but new CapCut-only fields may be ignored on write.
 - **OpenCut schema.** OpenCut's project format is still evolving. The adapter tolerates both flat `tracks` and nested `timeline.tracks` shapes; the writer always emits the flat form (OpenCut ≥ 0.5).
-- **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. A future backend must integrate with CapCut or OpenCut before tasks can advance beyond queued.
+- **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`). A future backend must integrate with CapCut or OpenCut before tasks can advance beyond queued.
 - **No UI automation.** If you need to drive CapCut's GUI (open menus, click filters), pair this server with a UI-automation layer (AutoHotkey on Windows).
 
 ## License

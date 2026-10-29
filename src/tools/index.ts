@@ -20,6 +20,8 @@ import { effectsTools } from "./effects.js";
 import { audioTools } from "./audio.js";
 import { exportTools } from "./export.js";
 import { inspectTools } from "./inspect.js";
+import { generationTools } from "./generation.js";
+import { shotsTools } from "./shots.js";
 
 export interface Tool<S extends z.ZodTypeAny = z.ZodTypeAny> {
   name: string;
@@ -37,6 +39,8 @@ export const allTools: Tool[] = [
   ...audioTools,
   ...exportTools,
   ...inspectTools,
+  ...generationTools,
+  ...shotsTools,
 ];
 
 /** Lookup helper. */

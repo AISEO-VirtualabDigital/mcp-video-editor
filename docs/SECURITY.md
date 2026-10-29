@@ -138,6 +138,8 @@ The check runs even in dry-run mode so the AI gets feedback on unsafe paths befo
 
 **Issue:** Every dry-run invocation wrote a `<nanoid>.preview.json` to the cache directory, never cleaning up. Each preview is the full project state. Long-running sessions could fill the disk.
 
+**Current state:** preview snapshots are now opt-in (`MCP_VIDEO_DRY_RUN_SNAPSHOT=1`) and route through `writeSerialized`. When enabled, the janitor below still bounds the directory at 100 MiB; when disabled — the default — nothing is written at all.
+
 **Fix:** Added `janitCache()` which runs after every dry-run write. Walks `<cacheRoot>/dry-run/`, sorts entries by mtime ascending, deletes oldest until total size is under 90% of `MAX_CACHE_BYTES` (100 MiB default). Hysteresis prevents thrashing.
 
 **Verified by code inspection.**

@@ -3,6 +3,81 @@
 All notable changes to this project. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [1.2.0] — 2026-10-29
+
+No new tools — the count stays at **59**, and CapCut/OpenCut remain the only
+editors. This release is the write-path, typing, and onboarding pass.
+
+### Performance
+
+- **CapCut writes no longer do per-clip material lookups.** `buildCapcutDraft`
+  builds one `Map<materialId, type>` up front, so resolving `material_type` for
+  every segment is O(clips + materials) instead of O(clips × materials). The
+  old helper `inferMaterialType` ran a linear `find` per clip inside a `map`
+  over the whole timeline; it is gone.
+- **Serialization happens once per save.** Every mutation site now calls
+  `facade.serializeProject(project)` and hands the finished string to
+  `saveProjectSerialized` inside `withRetry`. Previously an `EBUSY` retry loop
+  re-ran `JSON.stringify` on the entire project up to three times, which on a
+  large timeline meant ~3× the CPU of the actual write. Affects `timeline`,
+  `effects`, `audio`, `generation`, `project`, and `text`.
+- **Narrower file-lock window.** `writeJson` and `writeText` share one
+  `writeSerialized` implementation: the temp file is opened with `wx`, written
+  through a single handle, closed, and only then renamed. Only the `rename`
+  touches the destination path, which is the smallest window Windows gives us
+  against CapCut's folder lock.
+- **Dry-run preview snapshots are opt-in.** A dry-run used to serialize the
+  project a second time and write a full copy into the cache on *every* call.
+  Set `MCP_VIDEO_DRY_RUN_SNAPSHOT=1` to restore that behaviour; the default
+  returns `previewPath: null` because the in-memory cache already holds the
+  proposed state.
+- **What was not changed, deliberately:** there was no
+  `JSON.parse(JSON.stringify(...))` anywhere in `src/` to replace. The single
+  deep clone is `structuredClone` (`src/tools/timeline.ts`), which is already
+  V8-native, and the timeline tools were already doing one `tracks.find` plus
+  one `clips.find` — not nested scans.
+
+### Added
+
+- **`src/adapters/raw.ts`** — the sanctioned place where an unmodelled vendor
+  object is widened into `RawBag` (`Record<string, unknown>`), plus `isRecord`,
+  `toRawBag`, `ensureBag`, `copyBag`, and typed `readString` / `readNumber` /
+  `readBoolean` / `readArray` readers.
+- **`docs/GETTING-STARTED.md`** — end-to-end onboarding: prerequisites, Windows
+  PowerShell and Unix install, what the installers do and refuse to do, manual
+  registration for all 8 clients, the runtime contract (open-before-mutate,
+  dry-run default, CapCut-closed requirement, backups, path confinement), env
+  var table, and a troubleshooting table.
+- **`scripts/smoke.mjs`**, wired to `npm run smoke` — boots the built server in
+  a throwaway sandbox and asserts 25 behaviours: tool count and registration,
+  create → open → track → clip → timeline, the dry-run no-write guarantee, XML
+  export plus its BETA labelling, path-traversal and export-root refusal,
+  vendor-field round-trip, and absence of temp-file litter. `npm run verify`
+  runs the typecheck and then the smoke test.
+
+### Changed
+
+- **OpenCut round-trips now preserve unmodelled vendor fields.** CapCut already
+  spread its cached raw root back over the document; OpenCut silently dropped
+  any key it did not model. Root, track, clip, material, text, and effect bags
+  are now spread in, so third-party metadata survives read → mutate → write.
+- **Read/write split into pure builders.** `buildCapcutDraft` and
+  `buildOpencutProject` produce the vendor document; `writeCapcutDraft` and
+  `writeOpencutProject` are thin serialize-and-write wrappers over
+  `facade.buildVendorDocument`. This is what makes serialize-once possible.
+
+### Typing
+
+- Type guards replaced casts in `src/safety/validator.ts` (root, material, and
+  clip checks now narrow via `isRecord`) and in `src/server.ts` (a
+  `LowLevelNotifier` interface for `notification()`, and a `hasShape` guard for
+  Zod object schemas, replacing two `as unknown as` escapes).
+- Effect and audio mutations write into `clip.raw` / `material.raw` bags
+  directly instead of casting them at each assignment.
+- Explicit `as Record<string, unknown>` / `as unknown as` occurrences dropped
+  from 12 to 6. The two remaining `as unknown as` are intentional: widening a
+  vendor root into its own type is exactly what `toRawBag` centralizes.
+
 ## [1.1.0] — 2026-10-29
 
 Tool count went from 54 to **59**. No editor adapters were rewritten — CapCut

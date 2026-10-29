@@ -9,6 +9,7 @@
 import type { EditorProject, EditorKind } from "./types.js";
 import * as capcut from "./capcut.js";
 import * as opencut from "./opencut.js";
+import { serializeJson, writeSerialized } from "../utils/fs.js";
 
 /** In-memory cache of currently-open projects keyed by project id. */
 const openProjects = new Map<string, EditorProject>();
@@ -35,11 +36,38 @@ export function getOpenProject(id: string): EditorProject {
 
 /** Save an in-memory project back to disk. */
 export async function saveProject(project: EditorProject): Promise<void> {
-  if (project.editor === "capcut") {
-    await capcut.writeCapcutDraft(project);
-  } else {
-    await opencut.writeOpencutProject(project);
-  }
+  await saveProjectSerialized(project, serializeProject(project));
+}
+
+/**
+ * Build the vendor document for a project (CapCut draft / OpenCut project).
+ * Validates first, so a broken project can never reach the disk.
+ */
+export function buildVendorDocument(project: EditorProject): unknown {
+  return project.editor === "capcut"
+    ? capcut.buildCapcutDraft(project)
+    : opencut.buildOpencutProject(project);
+}
+
+/**
+ * Serialize a project to JSON text.
+ *
+ * `JSON.stringify` is synchronous and is the only event-loop-blocking step in
+ * the write path, so callers serialize ONCE and hand the payload to
+ * `saveProjectSerialized` — a retry loop must never re-serialize.
+ */
+export function serializeProject(project: EditorProject): string {
+  return serializeJson(buildVendorDocument(project));
+}
+
+/**
+ * Write an already-serialized payload and refresh the cache.
+ *
+ * Use inside `withRetry` so only the file write is retried (EBUSY on Windows)
+ * while the expensive serialization happens once.
+ */
+export async function saveProjectSerialized(project: EditorProject, payload: string): Promise<void> {
+  await writeSerialized(project.filePath, payload);
   openProjects.set(project.id, project);
 }
 

@@ -57,6 +57,7 @@ import { opencutProjectPath, opencutProjectsRoot } from "../utils/paths.js";
 import { readJson, writeJson, listDir, safeStat, ensureDir } from "../utils/fs.js";
 import { assertOpencutProject, assertValidProject, ValidationError } from "../safety/validator.js";
 import { uid } from "../utils/id.js";
+import { toRawBag } from "./raw.js";
 
 interface OpenCutProject {
   version?: string;
@@ -240,7 +241,7 @@ export async function readOpencutProject(projectId: string): Promise<EditorProje
     materials,
     texts,
     effects,
-    raw: raw as unknown as Record<string, unknown>,
+    raw: toRawBag(raw),
   };
   assertValidProject(project);
   return project;
@@ -265,11 +266,19 @@ function normalizeTrackKind(t: string): Track["kind"] {
 
 /** Write an EditorProject back as OpenCut JSON. */
 export async function writeOpencutProject(project: EditorProject): Promise<void> {
+  await writeJson(project.filePath, buildOpencutProject(project));
+}
+
+/** Build the OpenCut document from a normalized project. */
+export function buildOpencutProject(project: EditorProject): OpenCutProject {
   assertValidProject(project);
   if (project.editor !== "opencut") {
     throw new ValidationError(`writeOpencutProject called on a ${project.editor} project`, project.filePath, "opencut");
   }
+  // Preserve unmodelled vendor fields: start from the cached root bag so keys we
+  // do not model survive the round-trip (CapCut already did this; OpenCut did not).
   const raw: OpenCutProject = {
+    ...(toRawBag(project.raw) as unknown as OpenCutProject),
     version: "0.5",
     id: project.id,
     name: project.name,
@@ -289,9 +298,11 @@ export async function writeOpencutProject(project: EditorProject): Promise<void>
         targetEnd: c.targetEnd,
         ...(typeof c.volume === "number" ? { volume: c.volume } : {}),
         ...(typeof c.speed === "number" ? { speed: c.speed } : {}),
+        ...(c.raw ?? {}),
       })),
       ...(typeof t.volume === "number" ? { volume: t.volume } : {}),
       ...(typeof t.visible === "boolean" ? { visible: t.visible } : {}),
+      ...(t.raw ?? {}),
     })),
     materials: project.materials.map((m) => ({
       id: m.id,
@@ -300,6 +311,7 @@ export async function writeOpencutProject(project: EditorProject): Promise<void>
       duration: m.duration,
       width: m.width,
       height: m.height,
+      ...(m.raw ?? {}),
     })),
     texts: project.texts.map((t) => ({
       id: t.id,
@@ -314,6 +326,7 @@ export async function writeOpencutProject(project: EditorProject): Promise<void>
       italic: t.italic,
       x: t.x,
       y: t.y,
+      ...(t.raw ?? {}),
     })),
     effects: project.effects.map((e) => ({
       id: e.id,
@@ -321,9 +334,10 @@ export async function writeOpencutProject(project: EditorProject): Promise<void>
       start: e.start,
       end: e.end,
       params: e.params,
+      ...(e.raw ?? {}),
     })),
   };
-  await writeJson(project.filePath, raw);
+  return raw;
 }
 
 /** Create a new empty OpenCut project. Returns the new project id. */

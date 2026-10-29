@@ -15,9 +15,10 @@ import { bus } from "./notifications/events.js";
 import type { ProjectChangedEvent, RenderProgressEvent } from "./adapters/types.js";
 import { formatUs } from "./utils/id.js";
 import { truncateForToolResult } from "./safety/dry-run.js";
+import { isRecord } from "./adapters/raw.js";
 
 const SERVER_NAME = "mcp-video-editor";
-const SERVER_VERSION = "1.1.0";
+const SERVER_VERSION = "1.2.0";
 
 export interface ServerContext {
   mcp: McpServer;
@@ -66,12 +67,12 @@ export function buildServer(): ServerContext {
       // We use `notifications/message` for everything with a structured
       // payload, which all 8 clients (Cursor, Claude, Codex, Antigravity,
       // OpenCode, KiloCode) handle out of the box.
-      await (mcp.server as unknown as {
-        notification: (n: { method: string; params: unknown }) => Promise<void>;
-      }).notification({
-        method: name,
-        params: payload,
-      });
+      const server = mcp.server as LowLevelNotifier;
+      if (typeof server.notification !== "function") {
+        bus.log("warning", "Underlying server has no notification() — event dropped.");
+        return false;
+      }
+      await server.notification({ method: name, params: payload });
       return true;
     } catch (err) {
       // Swallow — never let a notification failure crash a tool call.
@@ -100,6 +101,16 @@ export function buildServer(): ServerContext {
   return ctxSingleton;
 }
 
+/** Minimal view of the SDK's low-level notifier, checked before use. */
+interface LowLevelNotifier {
+  notification?: (n: { method: string; params: unknown }) => Promise<void>;
+}
+
+/** True when a Zod schema exposes a `shape` (i.e. it is a ZodObject). */
+function hasShape(value: unknown): value is { shape: Record<string, unknown> } {
+  return isRecord(value) && isRecord(value.shape);
+}
+
 /**
  * Register a single tool. We translate our `Tool` shape into the SDK's
  * `registerTool` config.
@@ -107,7 +118,8 @@ export function buildServer(): ServerContext {
 function registerToolWithMcp(mcp: McpServer, tool: Tool): void {
   // ZodObject -> ZodRawShape. The SDK accepts the shape and will produce a
   // JSON-schema definition for the client.
-  const shape = (tool.inputSchema as unknown as { shape: Record<string, unknown> }).shape;
+  const schema = tool.inputSchema;
+  const shape = hasShape(schema) ? schema.shape : {};
   mcp.registerTool(
     tool.name,
     {

@@ -25,6 +25,21 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 
 ## What's new
 
+### 1.2.0 — write path, typing, onboarding
+
+No new tools (still **59**). This release makes saves cheaper and types honest.
+
+| Area | Change |
+| --- | --- |
+| CapCut writes | `material_type` resolves through one `Map` instead of a `find` per clip — O(clips + materials) instead of O(clips × materials) |
+| Save path | Projects serialize **once**; an `EBUSY` retry re-runs only the file write, never `JSON.stringify` |
+| Dry-run | Preview snapshots are opt-in (`MCP_VIDEO_DRY_RUN_SNAPSHOT=1`); each dry-run used to write a full copy of the project |
+| OpenCut | Unmodelled vendor fields now round-trip at root/track/clip/material/text/effect level instead of being dropped |
+| Types | New `src/adapters/raw.ts` guards; explicit casts 12 → 6, the two remaining are centralized vendor-root widenings |
+| Tooling | `npm run smoke` (25 checks) and `npm run verify` (typecheck + smoke); new [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) |
+
+### 1.1.0 features
+
 | Feature | Tools | Notes |
 | --- | --- | --- |
 | Effects catalog | `list_effects`, `get_effect`, `apply_face_effect` | 20 curated effects across face-tracked, kinetic-text, color-grade, motion, sticker and ambient categories, each tagged with `faceSafe` and a `timingHint`. `apply_face_effect` validates the id, rejects empty/inverted windows, and warns when an effect is not face-safe |
@@ -64,13 +79,16 @@ The server normalizes both CapCut drafts and OpenCut projects into a single `Edi
 
 ## Safety rails
 
-- **Dry-run by default.** Every write tool takes `dryRun: true` unless you pass `dryRun: false`. Timeline/project edits update the in-memory cache so the AI can immediately query the new state, but do not write the editor project. Some dry-run operations save a preview snapshot in the MCP cache directory.
+- **Dry-run by default.** Every write tool takes `dryRun: true` unless you pass `dryRun: false`. Timeline/project edits update the in-memory cache so the AI can immediately query the new state, but do not write the editor project. Preview snapshots of dry-run state are off by default — set `MCP_VIDEO_DRY_RUN_SNAPSHOT=1` to cache them under `MCP_VIDEO_CACHE_DIR`.
 - **Backups before writes and deletes.** When `dryRun=false`, an existing target is backed up before overwrite; `delete_project` backs up the entire project file/folder before removal. Backups are never auto-deleted.
 - **Schema validation.** Reads validate the vendor file shape; writes validate the normalized project (clip overlap, dangling material references, negative durations, etc.) and refuse on violation.
 - **Destructive ops require explicit confirmation.** `delete_project` requires `confirm: true` or it refuses.
-- **Atomic writes.** All disk writes go through `tmp file + rename` so a crashed write never leaves a half-written draft.
+- **Atomic writes.** All disk writes go through `tmp file + rename` so a crashed write never leaves a half-written draft. The payload is serialized once, the temp file is written through a single handle, and only the final rename touches `draft_content.json` — the narrowest lock window available, since CapCut's folder lock is the thing that produces `EBUSY`.
+- **Close CapCut before a physical write.** CapCut holds handles on its draft folder while running. Writes retry on `EBUSY` with backoff, but a save that lands mid-render can still lose — close CapCut first.
 
 ## Quick start (Windows)
+
+> New here? [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) is the full walkthrough — prerequisites, both installers, manual registration for all 8 clients, and the safety constraints explained.
 
 ```powershell
 # 1. Clone or copy this folder somewhere, e.g. C:\Users\you\mcp-video-editor
@@ -194,8 +212,10 @@ mcp-video-editor/
 ├── configs/                     # Client config snippets (one per AI client)
 ├── scripts/
 │   ├── install-windows.ps1      # Windows installer
-│   └── install-unix.sh          # macOS/Linux fallback
+│   ├── install-unix.sh          # macOS/Linux fallback
+│   └── smoke.mjs                # 25-check end-to-end smoke test
 └── docs/
+    ├── GETTING-STARTED.md
     ├── ARCHITECTURE.md
     ├── TOOLS.md
     └── CLIENT_SETUP.md
@@ -209,6 +229,8 @@ npm run build        # tsc -> dist/
 npm run typecheck    # tsc --noEmit
 npm run dev          # run via tsx (no build step)
 npm run inspect      # launch with MCP inspector (requires npx mcp-inspector)
+npm run smoke        # build + 25-check end-to-end smoke test (throwaway sandbox)
+npm run verify       # typecheck, then smoke
 ```
 
 Smoke-test the server locally:

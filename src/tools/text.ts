@@ -109,7 +109,9 @@ async function applyTextMutation(
     newValue: project,
     description,
     apply: async () => {
-      await withRetry(() => facade.saveProject(project));
+      // Serialize once (the only sync CPU step), then retry only the write.
+      const payload = facade.serializeProject(project);
+      await withRetry(() => facade.saveProjectSerialized(project, payload));
       bus.emitProjectChanged({
         projectId: project.id,
         kind: project.editor,

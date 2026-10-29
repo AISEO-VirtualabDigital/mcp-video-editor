@@ -1,7 +1,7 @@
 {
   "name": "mcp-video-editor",
-  "version": "1.1.0",
-  "description": "MCP server for editing videos in CapCut and OpenCut from Cursor, Codex, Claude, Antigravity, OpenCode, and KiloCode",
+  "version": "1.2.0",
+  "description": "MCP server for editing videos in CapCut and OpenCut from Cursor, Codex, Claude, Antigravity, OpenCode, KiloCode, Qwen Code and ZCode",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -17,7 +17,9 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "inspect": "mcp-inspector node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "verify": "npm run typecheck && npm run smoke"
   },
   "engines": {
     "node": ">=18.0.0"

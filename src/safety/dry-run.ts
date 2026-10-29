@@ -43,6 +43,13 @@ export interface DryRunOptions {
   apply: () => Promise<void>;
 }
 
+/** True when `MCP_VIDEO_DRY_RUN_SNAPSHOT` asks for cached preview snapshots. */
+export function previewSnapshotsEnabled(): boolean {
+  const raw = process.env.MCP_VIDEO_DRY_RUN_SNAPSHOT;
+  if (!raw) return false;
+  return raw === "1" || raw.toLowerCase() === "true" || raw.toLowerCase() === "yes";
+}
+
 /**
  * Execute a write operation honoring the dry-run setting. Always returns a
  * structured ToolResult.
@@ -51,8 +58,21 @@ export async function executeWrite(opts: DryRunOptions): Promise<ToolResult> {
   const { dryRun = true, targetPath, newValue, description, apply } = opts;
 
   if (dryRun) {
-    // Persist a "preview" snapshot to the cache so the AI/client can read the
-    // proposed new state. This never touches the real draft path.
+    // Preview snapshots are OPT-IN (MCP_VIDEO_DRY_RUN_SNAPSHOT=1).
+    //
+    // Every dry-run used to serialize the whole project a second time and write
+    // a copy into the cache — for a large timeline that doubled the CPU of each
+    // edit and filled the cache. The in-memory cache already holds the proposed
+    // state (read it with get_project_state), so the snapshot is off by default.
+    if (!previewSnapshotsEnabled()) {
+      return {
+        ok: true,
+        summary: `[DRY-RUN] ${description}. In-memory cache updated; no file written and no preview snapshot (set MCP_VIDEO_DRY_RUN_SNAPSHOT=1 to cache one).`,
+        data: { dryRun: true, previewPath: null, targetPath },
+        dryRun: true,
+      };
+    }
+
     const cachePath = path.join(cacheRoot(), "dry-run", `${nanoid(8)}.preview.json`);
     await ensureDir(path.dirname(cachePath));
     await writeJson(cachePath, newValue);

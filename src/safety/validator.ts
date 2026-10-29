@@ -9,6 +9,7 @@
  */
 
 import type { EditorProject, Track, Clip, Material } from "../adapters/types.js";
+import { isRecord } from "../adapters/raw.js";
 
 export class ValidationError extends Error {
   constructor(
@@ -24,10 +25,10 @@ export class ValidationError extends Error {
 
 /** Validate that `obj` looks like a CapCut draft_content.json root. */
 export function assertCapcutDraft(obj: unknown, filePath: string): void {
-  if (typeof obj !== "object" || obj === null) {
+  if (!isRecord(obj)) {
     throw new ValidationError("CapCut draft root must be an object", filePath, "object", typeof obj);
   }
-  const root = obj as Record<string, unknown>;
+  const root = obj;
   if (!Array.isArray(root.tracks)) {
     throw new ValidationError("CapCut draft missing `tracks` array", filePath, "array", typeof root.tracks);
   }
@@ -42,10 +43,10 @@ export function assertCapcutDraft(obj: unknown, filePath: string): void {
 
 /** Validate that `obj` looks like an OpenCut project JSON root. */
 export function assertOpencutProject(obj: unknown, filePath: string): void {
-  if (typeof obj !== "object" || obj === null) {
+  if (!isRecord(obj)) {
     throw new ValidationError("OpenCut project root must be an object", filePath, "object", typeof obj);
   }
-  const root = obj as Record<string, unknown>;
+  const root = obj;
   if (typeof root.version !== "string" && typeof root.schema !== "string") {
     // Not all OpenCut builds tag a schema; warn-soft: allow but record.
   }
@@ -108,7 +109,7 @@ function assertTrack(t: Track, filePath: string, clipIds: Set<string>, materialI
 
 /** Generic helper — asserts the value matches a Zod-like predicate (we use plain TS guards to avoid zod overhead on hot paths). */
 export function assertMaterial(m: unknown): asserts m is Material {
-  if (typeof m !== "object" || m === null) {
+  if (!isRecord(m)) {
     throw new ValidationError("material is not an object", "(unknown)", "Material");
   }
   const mm = m as Partial<Material>;
@@ -119,7 +120,7 @@ export function assertMaterial(m: unknown): asserts m is Material {
 
 /** Generic helper — asserts the value matches a Clip. */
 export function assertClip(c: unknown): asserts c is Clip {
-  if (typeof c !== "object" || c === null) {
+  if (!isRecord(c)) {
     throw new ValidationError("clip is not an object", "(unknown)", "Clip");
   }
   const cc = c as Partial<Clip>;

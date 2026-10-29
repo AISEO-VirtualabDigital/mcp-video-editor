@@ -52,11 +52,11 @@ When a tool like `add_video_clip` is invoked:
 3. The tool calls `facade.getOpenProject(projectId)` to fetch the in-memory `EditorProject`.
 4. The tool mutates the project (adds the clip).
 5. The tool calls `facade.cacheProject(project)` to push the mutated copy back into the cache so subsequent reads see it.
-6. The tool returns a `ToolResult` with `dryRun=true` (default). The editor project is not written, though some dry-run operations save a preview snapshot in the MCP cache directory.
+6. The tool returns a `ToolResult` with `dryRun=true` (default). The editor project is not written. Preview snapshots of dry-run state are opt-in (`MCP_VIDEO_DRY_RUN_SNAPSHOT=1`) — they used to be written on every dry-run, which serialized the whole project a second time for information the in-memory cache already held.
 7. If the AI later calls `save_project` with `dryRun=false`:
    - `executeWrite()` runs `backupFile()` first, copying the existing file to `~/.mcp-video-editor/backups/...`.
-   - `apply()` calls `facade.saveProject(project)`, which dispatches to the editor-specific adapter.
-   - The adapter re-emits the vendor JSON shape (CapCut `draft_content.json` or OpenCut project JSON) and writes it atomically (temp file + rename).
+   - `apply()` calls `facade.serializeProject(project)` ONCE and hands the payload to `facade.saveProjectSerialized(project, payload)` inside `withRetry`. Only the file write is retried; the expensive `JSON.stringify` never re-runs.
+   - The adapter re-emits the vendor JSON shape (CapCut `draft_content.json` or OpenCut project JSON) via a pure builder — `buildCapcutDraft` / `buildOpencutProject` — and the write goes through `writeSerialized` (temp file + rename). Separating "build the document" from "write the document" is what makes serialize-once possible.
    - `bus.emitProjectChanged(...)` fires, which the MCP server forwards as a `notifications/projectChanged` MCP notification to the client.
 
 ## Data flow: read path
@@ -115,7 +115,7 @@ All 6 supported AI clients handle `notifications/message` out of the box. Custom
 1. **Dry-run default.** Every write tool's `dryRun` schema field defaults to `true`. The mutation runs against the in-memory cache (so the AI can immediately query the new state) but no disk IO happens.
 2. **Backups before real writes/deletes.** `executeWrite()` copies an existing target file before overwrite. `delete_project` copies the whole project file/folder before removal. Backups are never auto-deleted.
 3. **Schema validation.** `assertCapcutDraft`, `assertOpencutProject`, and `assertValidProject` validate both vendor shapes and the normalized project. Writes are refused on validation failure.
-4. **Atomic writes.** All JSON writes go through `writeJson()` which writes to a temp file (with a nanoid suffix) and then `fs.rename()`s it into place — atomic on the same filesystem, so a crashed write never leaves a half-written draft.
+4. **Atomic writes.** All JSON and text writes go through `writeSerialized()`: the temp file is opened with `wx`, written through a single handle, closed, then `fs.rename()`d into place — atomic on the same filesystem, so a crashed write never leaves a half-written draft. Only the rename touches the destination, which is the narrowest possible lock window against CapCut's folder lock.
 5. **Destructive ops require explicit confirmation.** `delete_project` requires `confirm: true`.
 6. **Retry on EBUSY.** CapCut briefly locks draft files during render. `withRetry()` retries 3× with exponential backoff on `EBUSY` / `EPERM` / `ENOENT`.
 

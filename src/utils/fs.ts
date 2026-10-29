@@ -42,22 +42,48 @@ export async function readJson<T = unknown>(filePath: string): Promise<T> {
   }
 }
 
-/** Write JSON atomically (temp file + rename). */
-export async function writeJson(filePath: string, value: unknown, pretty = true): Promise<void> {
+/**
+ * Serialize a value to JSON text ONCE.
+ *
+ * Kept separate from the write so a retry loop (EBUSY on Windows) never
+ * re-serializes a multi-megabyte project. `JSON.stringify` is synchronous and
+ * therefore the only event-loop-blocking step in the write path — do it once
+ * and keep the lock window on the real file down to the rename.
+ */
+export function serializeJson(value: unknown, pretty = true): string {
+  return pretty ? JSON.stringify(value, null, 2) : JSON.stringify(value);
+}
+
+/**
+ * Write pre-serialized text atomically (temp file + rename).
+ *
+ * Lock window on the destination: only `rename` touches the real path, so
+ * CapCut's EBUSY window is as narrow as the OS allows. The temp file is opened
+ * with `wx`, written through a single handle and closed before the rename.
+ */
+export async function writeSerialized(filePath: string, payload: string): Promise<void> {
   await ensureDir(path.dirname(filePath));
   const tmpPath = `${filePath}.${nanoid(8)}.tmp`;
-  const payload = pretty ? JSON.stringify(value, null, 2) : JSON.stringify(value);
-  await fs.writeFile(tmpPath, payload, "utf-8");
-  // rename is atomic on the same filesystem
+  const handle = await fs.open(tmpPath, "wx");
+  try {
+    await handle.writeFile(payload, "utf-8");
+  } catch (err) {
+    await handle.close().catch(() => {});
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    throw err;
+  }
+  await handle.close();
   await fs.rename(tmpPath, filePath);
+}
+
+/** Write JSON atomically (temp file + rename). */
+export async function writeJson(filePath: string, value: unknown, pretty = true): Promise<void> {
+  await writeSerialized(filePath, serializeJson(value, pretty));
 }
 
 /** Write a text file atomically (temp file + rename). */
 export async function writeText(filePath: string, content: string): Promise<void> {
-  await ensureDir(path.dirname(filePath));
-  const tmpPath = `${filePath}.${nanoid(8)}.tmp`;
-  await fs.writeFile(tmpPath, content, "utf-8");
-  await fs.rename(tmpPath, filePath);
+  await writeSerialized(filePath, content);
 }
 
 /** Copy a file. Returns the destination path. */
@@ -143,6 +169,9 @@ export async function walkDir(dir: string): Promise<string[]> {
 /**
  * Retry a file operation a few times. CapCut on Windows briefly locks files
  * during render — a tiny backoff is enough to skip past it.
+ *
+ * Callers that retry a write should serialize the payload BEFORE entering the
+ * retry, so a lock storm never re-runs `JSON.stringify` (see `serializeJson`).
  */
 export async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 50): Promise<T> {
   let lastErr: unknown;

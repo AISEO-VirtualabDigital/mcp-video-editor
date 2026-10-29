@@ -63,6 +63,7 @@ import { capcutDraftContentPath, capcutDraftMetaPath, capcutDraftsRoot } from ".
 import { readJson, writeJson, listDir, safeStat, ensureDir } from "../utils/fs.js";
 import { assertCapcutDraft, assertValidProject, ValidationError } from "../safety/validator.js";
 import { uid } from "../utils/id.js";
+import { toRawBag } from "./raw.js";
 
 interface CapcutTrack {
   id: string;
@@ -276,7 +277,7 @@ export async function readCapcutDraft(draftId: string): Promise<EditorProject> {
     materials,
     texts,
     effects,
-    raw: raw as unknown as Record<string, unknown>,
+    raw: toRawBag(raw),
   };
   assertValidProject(project);
   return project;
@@ -310,16 +311,20 @@ function normalizeTrackKind(t: string): Track["kind"] {
 }
 
 /**
- * Write an EditorProject back to CapCut draft_content.json. We re-emit a
- * CapCut-shaped object by starting from the cached `raw` and updating tracks,
- * materials, and known fields. Unknown fields round-trip unchanged.
+ * Build the CapCut-shaped document from a normalized project. We start from the
+ * cached `raw` and update tracks, materials, and known fields, so unknown
+ * vendor fields round-trip unchanged.
+ *
+ * Material lookups go through one Map instead of a per-clip `find`, which turns
+ * the old O(clips × materials) walk into O(clips + materials).
  */
-export async function writeCapcutDraft(project: EditorProject): Promise<void> {
+export function buildCapcutDraft(project: EditorProject): CapcutDraft {
   assertValidProject(project);
   if (project.editor !== "capcut") {
     throw new ValidationError(`writeCapcutDraft called on a ${project.editor} project`, project.filePath, "capcut");
   }
-  const raw: CapcutDraft = (project.raw ? { ...(project.raw as CapcutDraft) } : { tracks: [], materials: {} }) as CapcutDraft;
+  const materialTypeById = new Map<string, Material["type"]>(project.materials.map((m) => [m.id, m.type]));
+  const raw: CapcutDraft = toRawBag(project.raw) as unknown as CapcutDraft;
   raw.id = project.id;
   raw.duration = project.duration;
   raw.fps = project.fps;
@@ -332,21 +337,18 @@ export async function writeCapcutDraft(project: EditorProject): Promise<void> {
   // Rebuild tracks
   raw.tracks = project.tracks.map((t) => {
     const segments: CapcutSegment[] = t.clips.map((c) => {
+      // Volume/speed are spread in conditionally instead of being poked onto a
+      // cast view — same output, no assertion.
       const seg: CapcutSegment = {
         id: c.id,
         material_id: c.materialId,
-        material_type: inferMaterialType(c.materialId, project.materials),
+        material_type: materialTypeById.get(c.materialId) ?? "video",
         target_timerange: { start: c.targetStart, duration: c.targetEnd - c.targetStart },
         source_timerange: { start: c.sourceIn, duration: c.sourceOut - c.sourceIn },
+        ...(typeof c.volume === "number" ? { volume: c.volume } : {}),
+        ...(typeof c.speed === "number" ? { speed: c.speed } : {}),
         ...(c.raw ?? {}),
       };
-      // Apply volume override if present.
-      if (typeof c.volume === "number") {
-        (seg as Record<string, unknown>).volume = c.volume;
-      }
-      if (typeof c.speed === "number") {
-        (seg as Record<string, unknown>).speed = c.speed;
-      }
       return seg;
     });
     return {
@@ -406,15 +408,12 @@ export async function writeCapcutDraft(project: EditorProject): Promise<void> {
     ...(e.raw ?? {}),
   }));
 
-  await writeJson(project.filePath, raw);
+  return raw;
 }
 
-function inferMaterialType(
-  id: string,
-  materials: Material[],
-): "video" | "audio" | "image" | "text" | "sticker" | undefined {
-  const m = materials.find((x) => x.id === id);
-  return m?.type;
+/** Write an EditorProject back to CapCut draft_content.json. */
+export async function writeCapcutDraft(project: EditorProject): Promise<void> {
+  await writeJson(project.filePath, buildCapcutDraft(project));
 }
 
 function denormalizeTrackKind(k: Track["kind"]): string {

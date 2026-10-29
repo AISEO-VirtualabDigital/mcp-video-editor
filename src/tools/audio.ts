@@ -102,7 +102,9 @@ async function applyAudioMutation(
     newValue: project,
     description,
     apply: async () => {
-      await withRetry(() => facade.saveProject(project));
+      // Serialize once (the only sync CPU step), then retry only the write.
+      const payload = facade.serializeProject(project);
+      await withRetry(() => facade.saveProjectSerialized(project, payload));
       bus.emitProjectChanged({
         projectId: project.id,
         kind: project.editor,
@@ -248,7 +250,9 @@ export const audioTools: Tool[] = [
           const clip = track.clips.find((c) => c.id === input.clipId);
           if (!clip) throw new Error(`Clip ${input.clipId} not found.`);
           if (!clip.raw) clip.raw = {};
-          (clip.raw as Record<string, unknown>).fade_in = { duration: input.duration };
+          const bag = clip.raw ?? {};
+          bag.fade_in = { duration: input.duration };
+          clip.raw = bag;
         },
       );
     },
@@ -270,7 +274,9 @@ export const audioTools: Tool[] = [
           const clip = track.clips.find((c) => c.id === input.clipId);
           if (!clip) throw new Error(`Clip ${input.clipId} not found.`);
           if (!clip.raw) clip.raw = {};
-          (clip.raw as Record<string, unknown>).fade_out = { duration: input.duration };
+          const bag = clip.raw ?? {};
+          bag.fade_out = { duration: input.duration };
+          clip.raw = bag;
         },
       );
     },
@@ -332,7 +338,9 @@ export const audioTools: Tool[] = [
           const material = project.materials.find((m) => m.id === clip.materialId);
           if (material) {
             if (!material.raw) material.raw = {};
-            (material.raw as Record<string, unknown>).denoise = input.enable;
+            const bag = material.raw ?? {};
+            bag.denoise = input.enable;
+            material.raw = bag;
           }
         },
       );

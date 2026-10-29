@@ -7,7 +7,7 @@
 
 ## Threat model
 
-The MCP server runs as the local user with full filesystem permissions. The AI client (Cursor, Claude Desktop, Codex, Antigravity, OpenCode, KiloCode) is trusted to call tools with reasonable inputs, but a **prompt-injected or hostile AI** can call any tool with any arguments. Therefore:
+The MCP server runs as the local user with full filesystem permissions. The AI client (Cursor, Claude Desktop, Codex, Antigravity, OpenCode, KiloCode, Qwen Code, ZCode CLI) is trusted to call tools with reasonable inputs, but a **prompt-injected or hostile AI** can call any tool with any arguments. Therefore:
 
 1. Every user-supplied identifier that ends up in a path must be validated before use.
 2. Every resolved path must be checked for containment inside the expected root before any filesystem mutation.

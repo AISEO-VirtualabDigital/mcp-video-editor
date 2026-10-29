@@ -218,7 +218,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
   | node dist/index.js
 ```
 
-You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor", version: "1.0.0" }`.
+You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor", version: "1.1.0" }`.
 
 ## Limitations & notes
 
@@ -232,6 +232,10 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **`generate_voice` needs credentials and network.** It calls OpenAI or ElevenLabs directly; with `dryRun: true` (the default) nothing is synthesized.
 - **`apply_face_effect` writes timeline data, not pixels.** It appends an `effect:<id>` entry (window + catalog metadata incl. `faceSafe`) to the project, so the editor or renderer still has to draw the effect. No face-tracking model runs in this server.
 - **No UI automation.** If you need to drive CapCut's GUI (open menus, click filters), pair this server with a UI-automation layer (AutoHotkey on Windows).
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for what changed in each release (current: 1.1.0 — 59 tools, effects catalog, voice synthesis, motion engine, beta Premiere/Filmora export).
 
 ## License
 

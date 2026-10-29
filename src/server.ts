@@ -17,7 +17,7 @@ import { formatUs } from "./utils/id.js";
 import { truncateForToolResult } from "./safety/dry-run.js";
 
 const SERVER_NAME = "mcp-video-editor";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "1.1.0";
 
 export interface ServerContext {
   mcp: McpServer;
@@ -44,7 +44,7 @@ export function buildServer(): ServerContext {
         logging: {},
       },
       instructions:
-        "MCP server for editing videos in CapCut and OpenCut, plus programmatic video creation via Remotion/HyperFrames, speech synthesis via OpenAI/ElevenLabs, and a video effects catalog. All write tools default to dryRun=true — pass dryRun=false to persist. Time units are microseconds (1_000_000 = 1s). Use create_video to author a new video from a generation spec, render_project to render it to MP4, list_shots/get_shot to browse the motion shot library, list_effects/get_effect to browse video effects, and generate_voice to synthesize narration audio.",
+        "MCP server for editing videos in CapCut and OpenCut, plus programmatic video creation via Remotion/HyperFrames/motion, speech synthesis via OpenAI/ElevenLabs, and a video effects catalog. All write tools default to dryRun=true — pass dryRun=false to persist. Time units are microseconds (1_000_000 = 1s). Use create_video to author a new video from a generation spec, render_project to render it to MP4, list_shots/get_shot to browse the motion shot library, list_effects/get_effect to browse video effects, apply_face_effect to apply one over a timeline window, and generate_voice to synthesize narration audio. export_timeline_xml writes FCP7 XML for Premiere or Filmora but is BETA and has never been tested against either app — CapCut and OpenCut remain the only supported editors.",
     },
   );
 
@@ -64,7 +64,7 @@ export function buildServer(): ServerContext {
       // object. For custom notifications we send them via the low-level
       // protocol — see Server.notification in shared/protocol.d.ts.
       // We use `notifications/message` for everything with a structured
-      // payload, which all 6 clients (Cursor, Claude, Codex, Antigravity,
+      // payload, which all 8 clients (Cursor, Claude, Codex, Antigravity,
       // OpenCode, KiloCode) handle out of the box.
       await (mcp.server as unknown as {
         notification: (n: { method: string; params: unknown }) => Promise<void>;

@@ -1,6 +1,6 @@
 {
   "name": "mcp-video-editor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server for editing videos in CapCut and OpenCut from Cursor, Codex, Claude, Antigravity, OpenCode, and KiloCode",
   "license": "MIT",
   "type": "module",

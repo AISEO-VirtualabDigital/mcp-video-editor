@@ -45,8 +45,8 @@ The server normalizes both CapCut drafts and OpenCut projects into a single `Edi
 
 ## Safety rails
 
-- **Dry-run by default.** Every write tool takes `dryRun: true` unless you pass `dryRun: false`. The in-memory cache is mutated so the AI can immediately query the new state, but no file is touched.
-- **Backups before writes.** When `dryRun=false`, the target file is copied to `~/.mcp-video-editor/backups/<date>/<timestamp>__<filename>.<rand>.bak` before overwrite. Backups are never auto-deleted.
+- **Dry-run by default.** Every write tool takes `dryRun: true` unless you pass `dryRun: false`. Timeline/project edits update the in-memory cache so the AI can immediately query the new state, but do not write the editor project. Some dry-run operations save a preview snapshot in the MCP cache directory.
+- **Backups before writes and deletes.** When `dryRun=false`, an existing target is backed up before overwrite; `delete_project` backs up the entire project file/folder before removal. Backups are never auto-deleted.
 - **Schema validation.** Reads validate the vendor file shape; writes validate the normalized project (clip overlap, dangling material references, negative durations, etc.) and refuse on violation.
 - **Destructive ops require explicit confirmation.** `delete_project` requires `confirm: true` or it refuses.
 - **Atomic writes.** All disk writes go through `tmp file + rename` so a crashed write never leaves a half-written draft.
@@ -186,7 +186,7 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **CapCut has no official API.** This server reads/writes CapCut's `draft_content.json` directly. CapCut must be **closed** (or at least not actively editing the same draft) when you call `save_project` with `dryRun: false`, otherwise the file may be locked — the server retries 3× on `EBUSY` but may still fail.
 - **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw`, so round-tripping older drafts is generally safe, but new CapCut-only fields may be ignored on write.
 - **OpenCut schema.** OpenCut's project format is still evolving. The adapter tolerates both flat `tracks` and nested `timeline.tracks` shapes; the writer always emits the flat form (OpenCut ≥ 0.5).
-- **Export is not actually rendering.** `export_project` writes an export task JSON and emits `renderProgress` notifications, but the actual MP4 render must be triggered by opening the draft in CapCut and pressing Export (CapCut will pick up the latest draft). For OpenCut, if a local OpenCut dev server is running on a known port, you can extend `tools/export.ts` to POST to its `/api/export` endpoint.
+- **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. A future backend must integrate with CapCut or OpenCut before tasks can advance beyond queued.
 - **No UI automation.** If you need to drive CapCut's GUI (open menus, click filters), pair this server with a UI-automation layer (AutoHotkey on Windows).
 
 ## License

@@ -3,19 +3,11 @@
  *
  *   - list_export_profiles   : return the preset export profiles
  *   - set_export_params      : set the export profile for a project
- *   - export_project         : queue an export; emits renderProgress notifications
- *   - get_render_status      : query status of an in-flight render
+ *   - export_project         : record a render request for a future backend
+ *   - get_render_status      : query the recorded request
  *
- * Implementation note: CapCut has no public CLI for headless export. The
- * `export_project` tool writes a CapCut/OpenCut-shaped "export task" JSON
- * into the configured export directory and emits renderProgress events so
- * the AI client can poll. The actual render is performed by CapCut's GUI
- * (which the user must trigger by opening the draft and pressing Export —
- * CapCut will pick up the updated draft on next open).
- *
- * For OpenCut, when a local OpenCut server is running on a known port, the
- * tool can POST to its /api/export endpoint; otherwise we follow the same
- * "emit a task" path.
+ * No renderer is currently connected. Live requests are stored as queued
+ * tasks and are never reported as rendering or complete.
  */
 
 import { z } from "zod";
@@ -25,10 +17,11 @@ import { DEFAULT_EXPORT_PROFILES, type ExportProfile } from "../adapters/types.j
 import { bus } from "../notifications/events.js";
 import { exportRoot } from "../utils/paths.js";
 import { ensureDir, writeJson, readJson, safeStat, listDir } from "../utils/fs.js";
-import { assertPathInside, assertSafeExternalPath, MAX_TOOL_RESULT_BYTES } from "../safety/path-guard.js";
+import { assertPathInside, assertSafeExternalPath } from "../safety/path-guard.js";
 import { uid } from "../utils/id.js";
 import path from "node:path";
 import { nowIso } from "../utils/id.js";
+import { executeWrite } from "../safety/dry-run.js";
 
 const listExportProfilesSchema = z.object({});
 
@@ -54,7 +47,7 @@ const exportProjectSchema = z.object({
   id: z.string().min(1).describe("Project id."),
   profileName: z.string().optional().describe('Preset name to use. Defaults to "1080p-30".'),
   outputPath: z.string().optional().describe('Override the output file path. Defaults to <exportRoot>/<projectName>.mp4.'),
-  dryRun: z.boolean().default(true).describe("When true, an export task is queued but no render is performed."),
+  dryRun: z.boolean().default(true).describe("When true, return a request preview without storing a task."),
 });
 
 const getRenderStatusSchema = z.object({
@@ -109,7 +102,7 @@ export const exportTools: Tool[] = [
   },
   {
     name: "set_export_params",
-    description: "Set the export profile for a project (writes a profile.json next to the project).",
+    description: "Set the export profile for a project (backs up an existing profile before writing).",
     inputSchema: setExportParamsSchema,
     run: async (raw) => {
       const input = setExportParamsSchema.parse(raw);
@@ -117,60 +110,66 @@ export const exportTools: Tool[] = [
       let profile: ExportProfile;
       if (input.custom) {
         profile = input.custom;
-      } else if (input.profileName && DEFAULT_EXPORT_PROFILES[input.profileName]) {
-        profile = DEFAULT_EXPORT_PROFILES[input.profileName];
       } else {
-        profile = DEFAULT_EXPORT_PROFILES["1080p-30"];
+        const profileName = input.profileName ?? "1080p-30";
+        if (!Object.hasOwn(DEFAULT_EXPORT_PROFILES, profileName)) {
+          return {
+            ok: false,
+            summary: `Unknown export profile "${profileName}". Use list_export_profiles to see supported profiles.`,
+            error: "unknown-profile",
+          } satisfies ToolResult;
+        }
+        profile = DEFAULT_EXPORT_PROFILES[profileName];
       }
       const profilePath = path.join(path.dirname(project.filePath), "export_profile.json");
-      if (input.dryRun) {
-        return {
-          ok: true,
-          summary: `[DRY-RUN] Would write export profile (${profile.width}x${profile.height}@${profile.fps}fps, ${profile.codec}/${profile.format}) to ${profilePath}.`,
-          data: { profile, profilePath, dryRun: true },
-          dryRun: true,
-        } satisfies ToolResult;
-      }
-      await ensureDir(path.dirname(profilePath));
-      await writeJson(profilePath, profile);
-      return {
-        ok: true,
-        summary: `Export profile set: ${profile.width}x${profile.height}@${profile.fps}fps, ${profile.codec}/${profile.format}.`,
-        data: { profile, profilePath },
-        dryRun: false,
-      } satisfies ToolResult;
+      return executeWrite({
+        dryRun: input.dryRun,
+        targetPath: profilePath,
+        newValue: profile,
+        description: `Set export profile (${profile.width}x${profile.height}@${profile.fps}fps, ${profile.codec}/${profile.format})`,
+        apply: async () => {
+          await ensureDir(path.dirname(profilePath));
+          await writeJson(profilePath, profile);
+        },
+      }).then((result) => ({
+        ...result,
+        data: { profile, profilePath, ...(result.data as object | undefined) },
+      }));
     },
   },
   {
     name: "export_project",
     description:
-      "Queue a render for a project. Emits renderProgress notifications as the task transitions through queued -> rendering -> complete. In dry-run mode, the task is queued but no render is actually triggered. In live mode, the export task is written to <exportRoot>/tasks/<id>.json for CapCut/OpenCut to pick up.",
+      "Record a render request for a project. No renderer is currently connected, so this tool does not create a video file; live requests remain queued for a future renderer integration.",
     inputSchema: exportProjectSchema,
     run: async (raw) => {
       const input = exportProjectSchema.parse(raw);
       const project = facade.getOpenProject(input.id);
       const profileName = input.profileName ?? "1080p-30";
-      const profile = DEFAULT_EXPORT_PROFILES[profileName] ?? DEFAULT_EXPORT_PROFILES["1080p-30"];
-      let outPath = input.outputPath ?? path.join(exportRoot(), `${project.name}.${profile.format}`);
-
-      // Security: if the user supplied an explicit outputPath, validate it.
-      // 1. Reject UNC paths, device paths, null bytes.
-      // 2. Confine to exportRoot (defense in depth — the render task JSON
-      //    itself is benign, but writing it to an arbitrary path is a write
-      //    primitive we don't want to expose).
-      if (input.outputPath) {
-        try {
-          assertSafeExternalPath(input.outputPath);
-          assertPathInside(input.outputPath, exportRoot(), "outputPath");
-        } catch (err) {
-          return {
-            ok: false,
-            summary: `Unsafe output path: ${(err as Error).message}`,
-            error: "unsafe-path",
-          } satisfies ToolResult;
-        }
+      if (!Object.hasOwn(DEFAULT_EXPORT_PROFILES, profileName)) {
+        return {
+          ok: false,
+          summary: `Unknown export profile "${profileName}". Use list_export_profiles to see supported profiles.`,
+          error: "unknown-profile",
+        } satisfies ToolResult;
       }
-      outPath = path.resolve(outPath);
+      const profile = DEFAULT_EXPORT_PROFILES[profileName];
+      const outPath = input.outputPath
+        ? path.resolve(input.outputPath)
+        : path.resolve(path.join(exportRoot(), `${path.basename(project.name)}.${profile.format}`));
+
+      try {
+        if (input.outputPath) {
+          assertSafeExternalPath(input.outputPath);
+        }
+        assertPathInside(outPath, exportRoot(), "outputPath");
+      } catch (err) {
+        return {
+          ok: false,
+          summary: `Unsafe output path: ${(err as Error).message}`,
+          error: "unsafe-path",
+        } satisfies ToolResult;
+      }
 
       const taskId = uid("render_");
       const task: RenderTask = {
@@ -184,15 +183,9 @@ export const exportTools: Tool[] = [
       };
 
       if (input.dryRun) {
-        bus.emitRenderProgress({
-          projectId: project.id,
-          phase: "queued",
-          progress: 0,
-          outputPath: outPath,
-        });
         return {
           ok: true,
-          summary: `[DRY-RUN] Queued render task ${taskId} for project "${project.name}". No render triggered.`,
+          summary: `[DRY-RUN] Render request preview for project "${project.name}". No task was stored and no video was rendered.`,
           data: { taskId, projectId: project.id, profile, outputPath: outPath, dryRun: true },
           dryRun: true,
         } satisfies ToolResult;
@@ -206,16 +199,10 @@ export const exportTools: Tool[] = [
         outputPath: outPath,
       });
 
-      // In a real implementation we'd shell out to CapCut CLI / POST to OpenCut.
-      // Here we simulate the lifecycle for completeness, ending in "complete"
-      // so the AI client can observe the notification stream.
-      // (We don't await this — fire-and-forget.)
-      void simulateRender(task);
-
       return {
         ok: true,
-        summary: `Render task ${taskId} queued for project "${project.name}" (${profileName}). Output: ${outPath}.`,
-        data: { taskId, projectId: project.id, profile, outputPath: outPath },
+        summary: `Render request ${taskId} recorded for project "${project.name}" (${profileName}). No renderer is connected; no video file was created.`,
+        data: { taskId, projectId: project.id, profile, outputPath: outPath, phase: "queued" },
         dryRun: false,
       } satisfies ToolResult;
     },
@@ -260,37 +247,3 @@ export const exportTools: Tool[] = [
     },
   },
 ];
-
-/** Simulate render progress over a few seconds. Useful for tests + dry-run demos. */
-async function simulateRender(task: RenderTask): Promise<void> {
-  task.phase = "rendering";
-  task.startedAt = nowIso();
-  await writeTask(task);
-  bus.emitRenderProgress({
-    projectId: task.projectId,
-    phase: "rendering",
-    progress: 0,
-    outputPath: task.outputPath,
-  });
-  for (let i = 1; i <= 10; i++) {
-    await new Promise((r) => setTimeout(r, 250));
-    task.progress = i / 10;
-    await writeTask(task);
-    bus.emitRenderProgress({
-      projectId: task.projectId,
-      phase: "rendering",
-      progress: task.progress,
-      outputPath: task.outputPath,
-    });
-  }
-  task.phase = "complete";
-  task.progress = 1;
-  task.completedAt = nowIso();
-  await writeTask(task);
-  bus.emitRenderProgress({
-    projectId: task.projectId,
-    phase: "complete",
-    progress: 1,
-    outputPath: task.outputPath,
-  });
-}

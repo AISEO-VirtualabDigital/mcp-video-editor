@@ -3,8 +3,8 @@
  * AI assistant to reason about. No writes, no dry-run needed.
  *
  *   - get_project_state   : top-level summary (canvas, fps, track count, etc.)
- *   - get_timeline         : full timeline structure
- *   - get_clips            : clips on a specific track (or all)
+ *   - get_timeline         : paginated timeline structure
+ *   - get_clips            : paginated clips on a specific track (or all)
  *   - get_track_info       : details about one track
  *   - get_materials         : all materials in the project
  *   - get_texts            : all text overlays
@@ -22,11 +22,15 @@ const getProjectStateSchema = z.object({
 
 const getTimelineSchema = z.object({
   id: z.string().min(1).describe("Project id."),
+  offset: z.number().int().min(0).default(0).describe("Number of clips to skip."),
+  limit: z.number().int().min(1).max(200).default(50).describe("Maximum clips to return."),
 });
 
 const getClipsSchema = z.object({
   id: z.string().min(1).describe("Project id."),
-  trackId: z.string().optional().describe("If omitted, returns clips across all tracks."),
+  trackId: z.string().min(1).optional().describe("If omitted, returns clips across all tracks."),
+  offset: z.number().int().min(0).default(0).describe("Number of clips to skip."),
+  limit: z.number().int().min(1).max(200).default(50).describe("Maximum clips to return."),
 });
 
 const getTrackInfoSchema = z.object({
@@ -79,32 +83,43 @@ export const inspectTools: Tool[] = [
   },
   {
     name: "get_timeline",
-    description: "Return the full normalized timeline: tracks, clips (with source/target time ranges).",
+    description: "Return paginated timeline clips and track metadata. Use offset/limit to fetch subsequent pages.",
     inputSchema: getTimelineSchema,
     run: async (raw) => {
       const input = getTimelineSchema.parse(raw);
       const p = facade.getOpenProject(input.id);
+      const allClips = p.tracks.flatMap((track) =>
+        track.clips.map((clip) => ({
+          trackId: track.id,
+          clip: {
+            id: clip.id,
+            materialId: clip.materialId,
+            sourceIn: clip.sourceIn,
+            sourceOut: clip.sourceOut,
+            targetStart: clip.targetStart,
+            targetEnd: clip.targetEnd,
+            volume: clip.volume,
+            speed: clip.speed,
+          },
+        })),
+      );
+      const page = allClips.slice(input.offset, input.offset + input.limit);
       return {
         ok: true,
-        summary: `Timeline: ${p.tracks.length} tracks, total duration ${p.duration}us.`,
+        summary: `Timeline: returned ${page.length} of ${allClips.length} clips (offset=${input.offset}, limit=${input.limit}) across ${p.tracks.length} tracks.`,
         data: {
           duration: p.duration,
+          totalClips: allClips.length,
+          offset: input.offset,
+          limit: input.limit,
+          hasMore: input.offset + page.length < allClips.length,
           tracks: p.tracks.map((t) => ({
             id: t.id,
             kind: t.kind,
             visible: t.visible ?? true,
             volume: t.volume ?? 1,
             clipCount: t.clips.length,
-            clips: t.clips.map((c) => ({
-              id: c.id,
-              materialId: c.materialId,
-              sourceIn: c.sourceIn,
-              sourceOut: c.sourceOut,
-              targetStart: c.targetStart,
-              targetEnd: c.targetEnd,
-              volume: c.volume,
-              speed: c.speed,
-            })),
+            clips: page.filter((entry) => entry.trackId === t.id).map((entry) => entry.clip),
           })),
         },
       } satisfies ToolResult;
@@ -112,7 +127,7 @@ export const inspectTools: Tool[] = [
   },
   {
     name: "get_clips",
-    description: "Return clips on one track (or all tracks when trackId is omitted).",
+    description: "Return a page of clips on one track (or all tracks when trackId is omitted).",
     inputSchema: getClipsSchema,
     run: async (raw) => {
       const input = getClipsSchema.parse(raw);
@@ -122,19 +137,35 @@ export const inspectTools: Tool[] = [
         if (!t) {
           return { ok: false, summary: `Track ${input.trackId} not found.`, error: "not-found" } satisfies ToolResult;
         }
+        const clips = t.clips.slice(input.offset, input.offset + input.limit);
         return {
           ok: true,
-          summary: `Track ${t.id} (${t.kind}) has ${t.clips.length} clips.`,
-          data: { trackId: t.id, kind: t.kind, clips: t.clips },
+          summary: `Track ${t.id} (${t.kind}): returned ${clips.length} of ${t.clips.length} clips.`,
+          data: {
+            trackId: t.id,
+            kind: t.kind,
+            total: t.clips.length,
+            offset: input.offset,
+            limit: input.limit,
+            hasMore: input.offset + clips.length < t.clips.length,
+            clips,
+          },
         } satisfies ToolResult;
       }
       const all = p.tracks.flatMap((t) =>
         t.clips.map((c) => ({ trackId: t.id, trackKind: t.kind, ...c })),
       );
+      const clips = all.slice(input.offset, input.offset + input.limit);
       return {
         ok: true,
-        summary: `${all.length} clips across ${p.tracks.length} tracks.`,
-        data: { clips: all },
+        summary: `Returned ${clips.length} of ${all.length} clips across ${p.tracks.length} tracks.`,
+        data: {
+          total: all.length,
+          offset: input.offset,
+          limit: input.limit,
+          hasMore: input.offset + clips.length < all.length,
+          clips,
+        },
       } satisfies ToolResult;
     },
   },

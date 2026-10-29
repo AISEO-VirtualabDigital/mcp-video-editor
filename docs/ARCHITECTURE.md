@@ -52,7 +52,7 @@ When a tool like `add_video_clip` is invoked:
 3. The tool calls `facade.getOpenProject(projectId)` to fetch the in-memory `EditorProject`.
 4. The tool mutates the project (adds the clip).
 5. The tool calls `facade.cacheProject(project)` to push the mutated copy back into the cache so subsequent reads see it.
-6. The tool returns a `ToolResult` with `dryRun=true` (default) — **no file IO happens**.
+6. The tool returns a `ToolResult` with `dryRun=true` (default). The editor project is not written, though some dry-run operations save a preview snapshot in the MCP cache directory.
 7. If the AI later calls `save_project` with `dryRun=false`:
    - `executeWrite()` runs `backupFile()` first, copying the existing file to `~/.mcp-video-editor/backups/...`.
    - `apply()` calls `facade.saveProject(project)`, which dispatches to the editor-specific adapter.
@@ -105,7 +105,7 @@ Three notification channels:
 | Method | Payload | When |
 | --- | --- | --- |
 | `notifications/projectChanged` | `{ projectId, kind, change, filePath, at }` | Every draft write, open, close, save |
-| `notifications/renderProgress` | `{ projectId, phase, progress, outputPath?, error?, at }` | Render task queued / rendering / complete / error |
+| `notifications/renderProgress` | `{ projectId, phase, progress, outputPath?, error?, at }` | Render request recorded as queued; no renderer is currently connected |
 | `notifications/message` | `{ level, data, logger, timestamp }` | Logs (info / warning / error) |
 
 All 6 supported AI clients handle `notifications/message` out of the box. Custom channels (`notifications/projectChanged`, `notifications/renderProgress`) are exposed for clients that subscribe to specific notification types.
@@ -113,7 +113,7 @@ All 6 supported AI clients handle `notifications/message` out of the box. Custom
 ## Safety guarantees
 
 1. **Dry-run default.** Every write tool's `dryRun` schema field defaults to `true`. The mutation runs against the in-memory cache (so the AI can immediately query the new state) but no disk IO happens.
-2. **Backups before real writes.** `executeWrite()` calls `backupFile()` which copies the existing target file to `~/.mcp-video-editor/backups/<date>/<time>__<basename>.<rand>.bak` before the new value is written. Backups are never auto-deleted.
+2. **Backups before real writes/deletes.** `executeWrite()` copies an existing target file before overwrite. `delete_project` copies the whole project file/folder before removal. Backups are never auto-deleted.
 3. **Schema validation.** `assertCapcutDraft`, `assertOpencutProject`, and `assertValidProject` validate both vendor shapes and the normalized project. Writes are refused on validation failure.
 4. **Atomic writes.** All JSON writes go through `writeJson()` which writes to a temp file (with a nanoid suffix) and then `fs.rename()`s it into place — atomic on the same filesystem, so a crashed write never leaves a half-written draft.
 5. **Destructive ops require explicit confirmation.** `delete_project` requires `confirm: true`.

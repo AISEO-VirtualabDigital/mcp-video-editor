@@ -26,6 +26,7 @@ import { uid } from "../utils/id.js";
 import { withRetry } from "../utils/fs.js";
 import { safeStat } from "../utils/fs.js";
 import { assertSafeExternalPath } from "../safety/path-guard.js";
+import { assertValidProject } from "../safety/validator.js";
 import type { TrackKind, Material } from "../adapters/types.js";
 
 const addTrackSchema = z.object({
@@ -153,36 +154,45 @@ async function applyMutation(
   dryRun: boolean,
   mutate: () => void | Promise<void>,
 ): Promise<ToolResult> {
-  const project = facade.getOpenProject(projectId);
-  await mutate();
-  facade.cacheProject(project); // make sure latest is in cache
-  recomputeDuration(projectId);
+  const originalProject = facade.getOpenProject(projectId);
+  const project = structuredClone(originalProject);
+  facade.cacheProject(project);
 
-  if (dryRun) {
-    return {
-      ok: true,
-      summary: `[DRY-RUN] ${description}. In-memory cache updated; NOT written to disk. Use save_project to persist.`,
-      data: { projectId, dryRun: true },
-      dryRun: true,
-    } satisfies ToolResult;
+  try {
+    await mutate();
+    recomputeDuration(projectId);
+    assertValidProject(project);
+
+    if (dryRun) {
+      return {
+        ok: true,
+        summary: `[DRY-RUN] ${description}. In-memory cache updated; NOT written to disk. Use save_project to persist.`,
+        data: { projectId, dryRun: true },
+        dryRun: true,
+      } satisfies ToolResult;
+    }
+
+    const result = await executeWrite({
+      dryRun: false,
+      targetPath: project.filePath,
+      newValue: project,
+      description,
+      apply: async () => {
+        await withRetry(() => facade.saveProject(project));
+        bus.emitProjectChanged({
+          projectId: project.id,
+          kind: project.editor,
+          change: "draft-written",
+          filePath: project.filePath,
+        });
+      },
+    });
+    if (!result.ok) facade.cacheProject(originalProject);
+    return result;
+  } catch (error) {
+    facade.cacheProject(originalProject);
+    throw error;
   }
-
-  // Persist now (with backup).
-  return await executeWrite({
-    dryRun: false,
-    targetPath: project.filePath,
-    newValue: project,
-    description,
-    apply: async () => {
-      await withRetry(() => facade.saveProject(project));
-      bus.emitProjectChanged({
-        projectId: project.id,
-        kind: project.editor,
-        change: "draft-written",
-        filePath: project.filePath,
-      });
-    },
-  });
 }
 
 export const timelineTools: Tool[] = [
@@ -281,23 +291,27 @@ export const timelineTools: Tool[] = [
           error: "unsafe-path",
         } satisfies ToolResult;
       }
-      // Verify the source file exists (only meaningful when not dry-run; skip on dry-run).
-      if (!input.dryRun) {
-        const st = await safeStat(input.sourcePath);
-        if (!st) {
-          return {
-            ok: false,
-            summary: `Source file not found: ${input.sourcePath}`,
-            error: "not-found",
-          } satisfies ToolResult;
-        }
-        if (st.isSymbolicLink()) {
-          return {
-            ok: false,
-            summary: `Refused to add symlink as source: ${input.sourcePath}. Resolve the symlink to its real target first.`,
-            error: "symlink-refused",
-          } satisfies ToolResult;
-        }
+      const st = await safeStat(input.sourcePath);
+      if (!st) {
+        return {
+          ok: false,
+          summary: `Source file not found: ${input.sourcePath}`,
+          error: "not-found",
+        } satisfies ToolResult;
+      }
+      if (st.isSymbolicLink()) {
+        return {
+          ok: false,
+          summary: `Refused to add symlink as source: ${input.sourcePath}. Resolve the symlink to its real target first.`,
+          error: "symlink-refused",
+        } satisfies ToolResult;
+      }
+      if (!st.isFile()) {
+        return {
+          ok: false,
+          summary: `Source path is not a file: ${input.sourcePath}`,
+          error: "not-a-file",
+        } satisfies ToolResult;
       }
       return applyMutation(
         input.id,
@@ -420,7 +434,7 @@ export const timelineTools: Tool[] = [
   },
   {
     name: "move_clip",
-    description: "Move a clip on the timeline (duration preserved). Does NOT prevent overlap — caller's responsibility.",
+    description: "Move a clip on the timeline (duration preserved). The move is rejected if it overlaps another clip on the same track.",
     inputSchema: moveClipSchema,
     run: async (raw) => {
       const input = moveClipSchema.parse(raw);

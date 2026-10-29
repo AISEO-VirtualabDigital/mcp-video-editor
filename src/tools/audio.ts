@@ -130,22 +130,27 @@ export const audioTools: Tool[] = [
           error: "unsafe-path",
         } satisfies ToolResult;
       }
-      if (!input.dryRun) {
-        const st = await safeStat(input.sourcePath);
-        if (!st) {
-          return {
-            ok: false,
-            summary: `Audio file not found: ${input.sourcePath}`,
-            error: "not-found",
-          } satisfies ToolResult;
-        }
-        if (st.isSymbolicLink()) {
-          return {
-            ok: false,
-            summary: `Refused to add symlink as source: ${input.sourcePath}.`,
-            error: "symlink-refused",
-          } satisfies ToolResult;
-        }
+      const st = await safeStat(input.sourcePath);
+      if (!st) {
+        return {
+          ok: false,
+          summary: `Audio file not found: ${input.sourcePath}`,
+          error: "not-found",
+        } satisfies ToolResult;
+      }
+      if (st.isSymbolicLink()) {
+        return {
+          ok: false,
+          summary: `Refused to add symlink as source: ${input.sourcePath}.`,
+          error: "symlink-refused",
+        } satisfies ToolResult;
+      }
+      if (!st.isFile()) {
+        return {
+          ok: false,
+          summary: `Audio source path is not a file: ${input.sourcePath}`,
+          error: "not-a-file",
+        } satisfies ToolResult;
       }
       return applyAudioMutation(
         input.id,

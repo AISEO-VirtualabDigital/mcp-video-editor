@@ -12,7 +12,7 @@ All 50 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | `close_project` | `id` | `{ ok }` | Cache-only; on-disk file unchanged |
 | `save_project` | `id`, `dryRun=true` | `{ backupPath?, targetPath }` | Backs up before write when dryRun=false |
 | `duplicate_project` | `id`, `editor`, `newName`, `dryRun=true` | `{ sourceId, newId, destPath, editor }` | Copies the whole draft folder for CapCut |
-| `delete_project` | `id`, `editor`, `confirm`, `dryRun=true` | `{ id, targetPath, editor }` | Requires `confirm: true` |
+| `delete_project` | `id`, `editor`, `confirm`, `dryRun=true` | `{ id, targetPath, editor, backupPath }` | Requires `confirm: true`; backs up the whole project before deletion |
 
 ## Timeline & clips
 
@@ -22,9 +22,9 @@ All 50 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | `remove_track` | `id`, `trackId`, `dryRun=true` | All clips on the track are dropped |
 | `add_clip` | `id`, `trackId`, `materialId`, `sourceIn=0`, `sourceOut`, `targetStart?`, `dryRun=true` | Appends to end of track if targetStart omitted |
 | `add_video_clip` | `id`, `trackId`, `sourcePath`, `duration`, `width=1920`, `height=1080`, `sourceIn=0`, `sourceOut?`, `targetStart?`, `dryRun=true` | Convenience: also creates the material |
-| `split_clip` | `id`, `trackId`, `clipId`, `at`, `dryRun=true` | `at` must be strictly inside `[targetStart, targetEnd]` |
+| `split_clip` | `id`, `trackId`, `clipId`, `at`, `dryRun=true` | `at` must be strictly between `targetStart` and `targetEnd` |
 | `trim_clip` | `id`, `trackId`, `clipId`, `newSourceIn?`, `newSourceOut?`, `newTargetStart?`, `newTargetEnd?`, `dryRun=true` | Only supplied fields change |
-| `move_clip` | `id`, `trackId`, `clipId`, `newTargetStart`, `dryRun=true` | Duration preserved; no overlap check |
+| `move_clip` | `id`, `trackId`, `clipId`, `newTargetStart`, `dryRun=true` | Duration preserved; rejects overlap on the same track |
 | `delete_clip` | `id`, `trackId`, `clipId`, `dryRun=true` | |
 | `set_clip_speed` | `id`, `trackId`, `clipId`, `speed`, `dryRun=true` | Speed ∈ [0.1, 10]; target duration = sourceDur/speed |
 | `set_track_volume` | `id`, `trackId`, `volume`, `dryRun=true` | Volume ∈ [0, 1] |
@@ -69,8 +69,8 @@ All 50 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | Tool | Args | Returns |
 | --- | --- | --- |
 | `list_export_profiles` | `{}` | `{ profiles: { "1080p-30", "1080p-60", "4k-30", "4k-60", "720p-30" } }` |
-| `set_export_params` | `id`, `profileName?`, `custom?`, `dryRun=true` | `{ profile, profilePath }` |
-| `export_project` | `id`, `profileName?`, `outputPath?`, `dryRun=true` | `{ taskId, projectId, profile, outputPath }` |
+| `set_export_params` | `id`, `profileName?`, `custom?`, `dryRun=true` | `{ profile, profilePath }`; backs up existing profile on write |
+| `export_project` | `id`, `profileName?`, `outputPath?`, `dryRun=true` | `{ taskId, projectId, profile, outputPath, phase? }`; records a queued request only, no video is rendered |
 | `get_render_status` | `taskId` | Full `RenderTask` |
 | `list_render_tasks` | `id?` | `{ tasks: RenderTask[] }` |
 
@@ -89,8 +89,8 @@ Export profiles:
 | Tool | Args | Returns |
 | --- | --- | --- |
 | `get_project_state` | `id` | `{ id, name, editor, filePath, duration, width, height, fps, trackCount, materialsCount, textsCount, effectsCount }` |
-| `get_timeline` | `id` | `{ duration, tracks: [{ id, kind, visible, volume, clipCount, clips }] }` |
-| `get_clips` | `id`, `trackId?` | `{ clips: [...] }` (all tracks when trackId omitted) |
+| `get_timeline` | `id`, `offset=0`, `limit=50` (max 200) | `{ duration, totalClips, offset, limit, hasMore, tracks: [...] }` |
+| `get_clips` | `id`, `trackId?`, `offset=0`, `limit=50` (max 200) | `{ total, offset, limit, hasMore, clips: [...] }` |
 | `get_track_info` | `id`, `trackId` | Full `Track` object |
 | `get_materials` | `id` | `{ materials: [...] }` |
 | `get_texts` | `id` | `{ texts: [...] }` |
@@ -101,8 +101,11 @@ Export profiles:
 
 Every write tool has a `dryRun` parameter that defaults to `true`. Behavior:
 
-- `dryRun=true` (default): the in-memory project cache is mutated (so the AI can immediately call `get_*` to inspect the new state), but **no file is written to disk**. The tool returns a `[DRY-RUN] ...` summary. The AI must call `save_project` with `dryRun=false` to persist.
+- `dryRun=true` (default): project edits update the in-memory project cache so the AI can immediately call `get_*` to inspect the new state. They are not written to the editor project unless separately saved with `save_project` and `dryRun=false`. Some dry-run operations cache a preview snapshot under the configured MCP cache directory.
 - `dryRun=false`: the project is mutated AND persisted to disk. A backup is created first (`~/.mcp-video-editor/backups/...`). A `notifications/projectChanged` notification is emitted.
+- Video/audio source paths must refer to existing regular files in both dry-run and live calls. Dry-run checks the source but does not write the project.
+- Invalid timeline edits are discarded without changing the open project cache. Clips may not overlap on the same track.
+- Export requests are not renders: without a connected renderer, live requests remain queued and no video file is created. Unknown preset names are rejected instead of silently falling back.
 
 ## Tool result shape
 

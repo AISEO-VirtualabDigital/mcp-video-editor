@@ -17,6 +17,7 @@ import type { Tool, ToolResult } from "./index.js";
 import * as facade from "../adapters/facade.js";
 import { bus } from "../notifications/events.js";
 import { executeWrite } from "../safety/dry-run.js";
+import { backupDirectory, backupFile, type BackupResult } from "../safety/backup.js";
 import { assertPathInside } from "../safety/path-guard.js";
 import { capcutDraftFolder, capcutDraftsRoot, opencutProjectPath, opencutProjectsRoot, exportRoot } from "../utils/paths.js";
 import { listDir, readJson, writeJson, ensureDir, safeStat, withRetry } from "../utils/fs.js";
@@ -390,15 +391,27 @@ export const projectTools: Tool[] = [
         } satisfies ToolResult;
       }
 
-      // Back up before delete (move into the backups folder).
-      // CapCut drafts are folders; OpenCut projects are single files.
-      if (input.editor === "capcut") {
-        const srcFolder = capcutDraftFolder(input.id);
-        // For simplicity we zip-less copy is heavy; instead we move the folder.
-        await fs.rm(srcFolder, { recursive: true, force: true });
-      } else {
-        await fs.rm(targetPath, { force: true });
+      let backup: BackupResult | null;
+      try {
+        backup = input.editor === "capcut"
+          ? await backupDirectory(targetPath)
+          : await backupFile(targetPath);
+      } catch (err) {
+        return {
+          ok: false,
+          summary: `Could not back up project before deletion: ${(err as Error).message}. Nothing was deleted.`,
+          error: "backup-failed",
+        } satisfies ToolResult;
       }
+      if (!backup) {
+        return {
+          ok: false,
+          summary: `Could not back up project at ${targetPath}. Nothing was deleted.`,
+          error: "backup-failed",
+        } satisfies ToolResult;
+      }
+
+      await fs.rm(targetPath, { recursive: input.editor === "capcut", force: false });
       facade.closeProject(input.id);
       bus.emitProjectChanged({
         projectId: input.id,
@@ -408,8 +421,9 @@ export const projectTools: Tool[] = [
       });
       return {
         ok: true,
-        summary: `Deleted ${input.editor} project ${input.id}.`,
-        data: { id: input.id, targetPath, editor: input.editor },
+        summary: `Deleted ${input.editor} project ${input.id}. Backup: ${backup.backupPath}.`,
+        data: { id: input.id, targetPath, editor: input.editor, backupPath: backup.backupPath },
+        backupPath: backup.backupPath,
         dryRun: false,
       } satisfies ToolResult;
     },

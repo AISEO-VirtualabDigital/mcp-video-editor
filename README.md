@@ -18,7 +18,7 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Shot library | `list_shots`, `get_shot` | ✅ | ✅ |
 | Voice synthesis | `generate_voice` | ✅ | ✅ |
 | Effects catalog | `list_effects`, `get_effect`, `apply_face_effect` | ✅ | ✅ |
-| Timeline exchange | `export_timeline_xml` | ✅ | ✅ |
+| Timeline exchange (beta) | `export_timeline_xml` | ⚠️ | ⚠️ |
 | Inspect / query | `get_project_state`, `get_timeline`, `get_clips`, `get_track_info`, `get_materials`, `get_texts`, `get_effects`, `get_open_project_ids` | ✅ | ✅ |
 
 **59 tools total**, all of which honor `dryRun: true` by default (the safe setting).
@@ -32,7 +32,7 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Motion render engine | `create_video`, `render_project` | Third engine alongside Remotion and HyperFrames; scaffolds a composition folder and renders through frame-stepping + ffmpeg |
 | Shot library | `list_shots`, `get_shot` | Motion shot cards by category, for storyboard-style clip selection |
 | New clients | — | Qwen Code and ZCode CLI configs added (`configs/qwen-config.json`, `configs/zcode-config.json`) |
-| Premiere + Filmora export | `export_timeline_xml` | Writes FCP7 XML (xmeml v4), the exchange format Adobe Premiere and Wondershare Filmora both import. Clips, media paths and volume survive; text, effects and transitions are reported as warnings |
+| Premiere + Filmora export — **BETA, untested in-app** | `export_timeline_xml` | Writes FCP7 XML (xmeml v4), the exchange format Adobe Premiere and Wondershare Filmora both document. Nobody on this project owns either app, so a real import has never been run — treat it as experimental until someone confirms it in Premiere/Filmora |
 
 Editor support is unchanged: **CapCut and OpenCut only**. Filmora and Adobe Premiere are not supported — see [Limitations & notes](#limitations--notes).
 
@@ -226,7 +226,8 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw`, so round-tripping older drafts is generally safe, but new CapCut-only fields may be ignored on write.
 - **OpenCut schema.** OpenCut's project format is still evolving. The adapter tolerates both flat `tracks` and nested `timeline.tracks` shapes; the writer always emits the flat form (OpenCut ≥ 0.5).
 - **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`; the `motion` engine renders through Remotion's frame-stepping plus ffmpeg). A future backend must integrate with CapCut or OpenCut before export tasks can advance beyond queued.
-- **CapCut and OpenCut are the only editors this server reads and writes.** Premiere and Filmora are supported one way only, as *import* targets: `export_timeline_xml` produces FCP7 XML, then you bring it in with File > Import (Premiere) or Timeline Exchange Format XML (Filmora). Native project-file support for either would need a running app plus a plugin bridge (Premiere UXP/CEP) or reverse-engineered format (Filmora's `.wfp`) — different architecture, not an adapter tweak.
+- **CapCut and OpenCut are the only editors this server reads and writes. Premiere and Filmora are NOT supported yet — the export is beta.** `export_timeline_xml` produces FCP7 XML, the format both editors document, but a real import has never been tested because we do not have Premiere or Filmora installed. Output is XML-valid and unit-tested; whether Premiere/Filmora swallow it is unconfirmed. Do not rely on it for paid work until that is verified.
+- **Native Premiere/Filmora support does not exist.** Premiere has no editable project file (it needs a running app plus a UXP/CEP plugin bridge) and Filmora's `.wfp` is undocumented. Both are separate architecture, not an adapter tweak.
 - **xmeml drops things.** Text overlays, stickers, generic effects, transitions and speed ramps do not survive the exchange format; `export_timeline_xml` lists exactly what it skipped in its warnings. Audio is exported at 48 kHz with clip volume mapped to an Audio Levels filter.
 - **`generate_voice` needs credentials and network.** It calls OpenAI or ElevenLabs directly; with `dryRun: true` (the default) nothing is synthesized.
 - **`apply_face_effect` writes timeline data, not pixels.** It appends an `effect:<id>` entry (window + catalog metadata incl. `faceSafe`) to the project, so the editor or renderer still has to draw the effect. No face-tracking model runs in this server.

@@ -87,13 +87,15 @@ All 59 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | --- | --- | --- | --- |
 | `generate_voice` | `text`, `provider`, `voice?`, `model?`, `outputPath?`, `dryRun=true` | `{ provider, voice, model, outputPath, bytesWritten, dryRun }` | Synthesizes MP3 via OpenAI or ElevenLabs TTS; requires `OPENAI_API_KEY` / `ELEVENLABS_API_KEY`. |
 
-## Timeline exchange (Premiere / Filmora)
+## Timeline exchange (Premiere / Filmora) — BETA
 
 | Tool | Args | Returns | Notes |
 | --- | --- | --- | --- |
 | `export_timeline_xml` | `id`, `target=generic` (`premiere`/`filmora`/`generic`), `fps?`, `outputPath?`, `dryRun=true` | `{ projectId, target, outputPath, bytes, stats, warnings }` | Writes FCP7 XML (xmeml v4) into the export root. Video + audio clips, media paths, volume levels and track visibility survive. Text, stickers, effects, transitions and speed ramps are skipped and reported in `warnings`. |
 
 Import it with **File > Import** in Premiere (sequence lands in the bin) or **Import > Timeline Exchange Format XML** in Filmora (relink media if prompted).
+
+> **Beta / unverified.** The XML itself is validated and unit-tested, but no import has ever been run in real Premiere or Filmora — we do not have either app. Premiere and Filmora are therefore *not* supported editors yet; this tool is experimental.
 
 ## Export & render
 

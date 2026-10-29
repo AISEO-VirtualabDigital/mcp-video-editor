@@ -27,16 +27,16 @@ const exportTimelineXmlSchema = z.object({
 });
 
 const IMPORT_HINT: Record<"premiere" | "filmora" | "generic", string> = {
-  premiere: "Import in Premiere: File > Import, select the .xml, the sequence lands in the bin.",
-  filmora: 'Import in Filmora: Import > choose the file type "Timeline Exchange Format XML", then relink media if prompted.',
-  generic: "Import via File > Import (Premiere) or Timeline Exchange Format XML (Filmora).",
+  premiere: "BETA/unverified: import in Premiere with File > Import, select the .xml — no one has tested this against a real Premiere install yet.",
+  filmora: 'BETA/unverified: in Filmora use Import > "Timeline Exchange Format XML", then relink media — no one has tested this against a real Filmora install yet.',
+  generic: "BETA/unverified: File > Import (Premiere) or Timeline Exchange Format XML (Filmora). Neither import has been tested.",
 };
 
 export const exchangeTools: Tool[] = [
   {
     name: "export_timeline_xml",
     description:
-      "Export the open project as FCP7 XML (xmeml v4) for import into Adobe Premiere or Wondershare Filmora — the format both editors document support for. Video and audio clips, media paths and volume levels survive; text overlays, stickers, effects and transitions do not (reported as warnings).",
+      "[BETA] Export the open project as FCP7 XML (xmeml v4) for import into Adobe Premiere or Wondershare Filmora — the format both editors document. Unverified in-app: no import has been tested against real Premiere or Filmora, so treat this as experimental. Video and audio clips, media paths and volume levels survive; text overlays, stickers, effects and transitions do not (reported as warnings).",
     inputSchema: exportTimelineXmlSchema,
     run: async (raw) => {
       const input = exportTimelineXmlSchema.parse(raw);

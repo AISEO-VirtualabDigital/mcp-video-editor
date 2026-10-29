@@ -4,6 +4,8 @@ Each of the 8 supported AI clients connects to the same MCP server over stdio. T
 
 This guide assumes you've already run `npm install && npm run build` in the project root so `dist/index.js` exists.
 
+> **Start here instead if you want the guided path:** [`GETTING-STARTED.md`](./GETTING-STARTED.md) covers prerequisites, both installers (`scripts/install-windows.ps1`, `scripts/install-unix.sh`), the runtime contract, and a troubleshooting table. This page is the per-client reference for wiring things up by hand.
+
 ## 1. Cursor
 
 Cursor reads MCP config from:
@@ -234,6 +236,12 @@ If any client shows "Failed to connect":
 2. Confirm `dist/index.js` exists at the path you put in the config.
 3. Try running the server directly: `node C:\path\to\dist\index.js` — it should sit waiting on stdin. Ctrl+C to exit.
 4. Check the client's logs (most clients log MCP server stderr to a file like `~/.cursor/logs/mcp.log`).
+
+## The one runtime rule worth repeating
+
+Close CapCut before a physical write (`save_project` or any mutation with `dryRun: false`). CapCut holds handles on its draft folder while running; the server retries `EBUSY` three times with backoff, but a save that lands mid-render can still fail. Dry-run calls are unaffected — they never touch disk.
+
+Give each client a generous timeout too. A large timeline serializes and writes in one shot, and on Windows a retry can push a save past a short client default — 60s is a sane floor.
 
 ## Multiple clients on the same machine
 

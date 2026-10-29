@@ -198,7 +198,9 @@ The check runs even in dry-run mode so the AI gets feedback on unsafe paths befo
 node scripts/security-test.mjs
 ```
 
-All 13 tests pass:
+All 13 refusals are asserted by `npm run smoke` (the `path-guard matrix` block), alongside two regression checks that the guards are not over-eager: a legit project still opens, and `delete_project` with `dryRun: true` leaves the file on disk.
+
+Caveat on rows 3 and 6: on Linux a `\\server\share` path is not "absolute" either, so it is refused earlier by the absolute-path check and the UNC rule is never reached. Both paths are refused, the reason differs by platform.
 
 | # | Test | Expected | Status |
 |---|------|----------|--------|
@@ -246,7 +248,6 @@ All 13 tests pass:
 
 ## Test coverage
 
-- **Functional tests:** 14 e2e scenarios pass (`scripts/e2e-test.mjs`)
-- **Security tests:** 13 scenarios pass (`scripts/security-test.mjs`)
-- **Smoke tests:** 50-tool registration + list_projects call (`scripts/smoke-test.mjs`)
+- **Functional + security tests:** the 13 refusal scenarios below run inside `npm run smoke` (`scripts/smoke.mjs`), together with the create/open/edit/export path. Earlier revisions of this page cited `scripts/e2e-test.mjs` and `scripts/security-test.mjs` — those probes were run ad hoc during development and were never committed, so the shipped suite is the authority.
+- **Smoke tests:** `npm run smoke` (`scripts/smoke.mjs`) boots the built server in a throwaway sandbox and asserts 37 behaviours — all 59 tools register, create/open/track/clip/export work end to end, dry-run writes nothing, path traversal and export-root escape are refused, and vendor fields survive a round-trip.
 - **TypeScript:** `tsc --noEmit` clean (21 source files, ~4,300 LOC after patches)

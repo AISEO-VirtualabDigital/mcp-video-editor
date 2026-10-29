@@ -16,7 +16,7 @@
                                       ▼
                 ┌─────────────────────────────────────────────────┐
                 │              Tool Registry                       │
-                │  13 modules, 59 tools total                     │
+                │  11 tool modules, 59 tools total                │
                 │  Each tool: name + description + Zod input      │
                 │  schema + async run() -> ToolResult              │
                 └─────────────────────┬───────────────────────────┘
@@ -94,7 +94,18 @@ interface EditorProject {
 }
 ```
 
-Both adapters convert to this shape on read and from it on write. Unknown vendor fields are preserved in `raw` so a write never loses data the adapter doesn't understand.
+Both adapters convert to this shape on read and from it on write.
+
+### Vendor field preservation
+
+Unknown vendor fields are preserved so a write never loses data the adapter does not model. There are two layers:
+
+- **Root bag** — `EditorProject.raw` holds the vendor document root as read from disk.
+- **Node bags** — each `Track`, `Clip`, `Material`, `TextOverlay` and `EffectRef` carries its own optional `raw` bag with that node's unmodelled keys.
+
+On write, the adapter spreads the root bag first and each node bag last (`...(c.raw ?? {})`), so vendor keys survive and known fields win. `src/adapters/raw.ts` is the single sanctioned place where an arbitrary vendor object is widened into `RawBag` (`Record<string, unknown>`) — `isRecord`, `toRawBag`, `ensureBag`, `copyBag` and the typed `readString` / `readNumber` / `readBoolean` / `readArray` readers. Everything else consumes those guards, so `unknown` stays `unknown` instead of being asserted into a shape nobody checked.
+
+Both adapters behave identically here as of 1.2.0; before that, OpenCut dropped unmodelled keys on write while CapCut preserved them.
 
 ## Notification bus
 
@@ -108,7 +119,7 @@ Three notification channels:
 | `notifications/renderProgress` | `{ projectId, phase, progress, outputPath?, error?, at }` | Render request recorded as queued; no renderer is currently connected |
 | `notifications/message` | `{ level, data, logger, timestamp }` | Logs (info / warning / error) |
 
-All 6 supported AI clients handle `notifications/message` out of the box. Custom channels (`notifications/projectChanged`, `notifications/renderProgress`) are exposed for clients that subscribe to specific notification types.
+All 8 supported AI clients handle `notifications/message` out of the box. Custom channels (`notifications/projectChanged`, `notifications/renderProgress`) are exposed for clients that subscribe to specific notification types.
 
 ## Safety guarantees
 
@@ -118,6 +129,19 @@ All 6 supported AI clients handle `notifications/message` out of the box. Custom
 4. **Atomic writes.** All JSON and text writes go through `writeSerialized()`: the temp file is opened with `wx`, written through a single handle, closed, then `fs.rename()`d into place — atomic on the same filesystem, so a crashed write never leaves a half-written draft. Only the rename touches the destination, which is the narrowest possible lock window against CapCut's folder lock.
 5. **Destructive ops require explicit confirmation.** `delete_project` requires `confirm: true`.
 6. **Retry on EBUSY.** CapCut briefly locks draft files during render. `withRetry()` retries 3× with exponential backoff on `EBUSY` / `EPERM` / `ENOENT`.
+
+## Verification
+
+Two layers, both runnable locally:
+
+| Command | What it proves |
+| --- | --- |
+| `npm run typecheck` | `tsc --noEmit` — strict types across `src/`, no emit |
+| `npm run build` | `tsc` → `dist/` |
+| `npm run smoke` | Builds, then `scripts/smoke.mjs` spawns `dist/index.js` over stdio in a throwaway sandbox and asserts 37 behaviours: all 59 tools register, create → open → track → clip → timeline, dry-run writes nothing, XML export is labelled BETA, the full path-guard matrix refuses traversal ids, dot-prefixed ids, relative/UNC/device/null-byte media paths and export-root escapes, vendor fields round-trip, no temp files litter the project dir |
+| `npm run verify` | Typecheck, then smoke |
+
+The smoke test redirects every path (`MCP_VIDEO_BACKUP_DIR`, `MCP_VIDEO_EXPORT_DIR`, `MCP_VIDEO_CACHE_DIR`, `OPENCUT_PROJECTS_DIR`, `HOME`) into a temp directory, so it never touches a real draft, backup, or export.
 
 ## Editor invariants enforced
 

@@ -136,7 +136,7 @@ Export profiles:
 
 Every write tool has a `dryRun` parameter that defaults to `true`. Behavior:
 
-- `dryRun=true` (default): project edits update the in-memory project cache so the AI can immediately call `get_*` to inspect the new state. They are not written to the editor project unless separately saved with `save_project` and `dryRun=false`. Some dry-run operations cache a preview snapshot under the configured MCP cache directory.
+- `dryRun=true` (default): project edits update the in-memory project cache so the AI can immediately call `get_*` to inspect the new state. They are not written to the editor project unless separately saved with `save_project` and `dryRun=false`. No preview file is written — the result reports `previewPath: null`. Set `MCP_VIDEO_DRY_RUN_SNAPSHOT=1` if you actually want each dry-run to cache a JSON snapshot of the proposed state under `MCP_VIDEO_CACHE_DIR`.
 - `dryRun=false`: the project is mutated AND persisted to disk. A backup is created first (`~/.mcp-video-editor/backups/...`). A `notifications/projectChanged` notification is emitted.
 - Video/audio source paths must refer to existing regular files in both dry-run and live calls. Dry-run checks the source but does not write the project.
 - Invalid timeline edits are discarded without changing the open project cache. Clips may not overlap on the same track.

@@ -170,6 +170,33 @@ try {
   await check("open refuses a traversal project id", () =>
     mustRefuse("open_project", { id: "../../etc/passwd", editor: "opencut" }, "invalid|unsafe|traversal"));
 
+  // --- path-guard matrix (mirrors docs/SECURITY.md) -----------------------
+  await check("open refuses a leading dot", () =>
+    mustRefuse("open_project", { id: ".env", editor: "opencut" }, "dot"));
+  await check("open refuses a slash in the id", () =>
+    mustRefuse("open_project", { id: "foo/bar", editor: "opencut" }, "match"));
+  await check("open refuses a backslash traversal in the id", () =>
+    mustRefuse("open_project", { id: "foo\\..\\bar", editor: "opencut" }, "match"));
+  await check("delete refuses a traversal id", () =>
+    mustRefuse("delete_project", { id: "../../../", editor: "opencut", confirm: true, dryRun: false }, "unsafe|traversal"));
+  await check("a relative media path is refused", () =>
+    mustRefuse("add_video_clip", { id, trackId: videoTrack, sourcePath: "./video.mp4", duration: 1000, dryRun: true }, "absolute"));
+  await check("a UNC media path is refused", () =>
+    mustRefuse("add_audio_clip", { id, trackId: audioTrack, sourcePath: "//attacker/share/audio.wav", duration: 1000, dryRun: true }, "unc"));
+  await check("a backslash UNC media path is refused", () =>
+    mustRefuse("add_video_clip", { id, trackId: videoTrack, sourcePath: "\\\\attacker\\share\\p.exe", duration: 1000, dryRun: true }, "absolute|unc"));
+  await check("a device path is refused", () =>
+    mustRefuse("add_video_clip", { id, trackId: videoTrack, sourcePath: "\\\\.\\C:\\Windows\\v.mp4", duration: 1000, dryRun: true }, "absolute|device"));
+  await check("a null byte in a media path is refused", () =>
+    mustRefuse("add_video_clip", { id, trackId: videoTrack, sourcePath: "/tmp/file\u0000.exe", duration: 1000, dryRun: true }, "null"));
+  await check("export refuses an absolute path outside the export root", () =>
+    mustRefuse("export_project", { id, outputPath: "/etc/passwd.mp4", dryRun: false }, "outside root|escape"));
+
+  // Regression: the guards must not be over-eager.
+  const deleted = await client.callTool({ name: "delete_project", arguments: { id, editor: "opencut", confirm: true, dryRun: true } });
+  check("delete_project dry-run reports success", () => assert.ok(!deleted.isError));
+  await check("delete_project dry-run leaves the project on disk", () => fs.access(path.join(dirs.opencut, `${id}.json`)));
+
   // --- vendor round-trip --------------------------------------------------
   const seededId = "proj_roundtrip";
   const seeded = {

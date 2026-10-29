@@ -49,9 +49,11 @@ editors. This release is the write-path, typing, and onboarding pass.
   dry-run default, CapCut-closed requirement, backups, path confinement), env
   var table, and a troubleshooting table.
 - **`scripts/smoke.mjs`**, wired to `npm run smoke` — boots the built server in
-  a throwaway sandbox and asserts 25 behaviours: tool count and registration,
+  a throwaway sandbox and asserts 37 behaviours: tool count and registration,
   create → open → track → clip → timeline, the dry-run no-write guarantee, XML
-  export plus its BETA labelling, path-traversal and export-root refusal,
+  export plus its BETA labelling, the full path-guard matrix (traversal ids,
+  dot-prefixed ids, relative / UNC / device / null-byte media paths, export-root
+  escape) with regression checks that the guards are not over-eager,
   vendor-field round-trip, and absence of temp-file litter. `npm run verify`
   runs the typecheck and then the smoke test.
 

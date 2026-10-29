@@ -353,7 +353,7 @@ Want proof the install is healthy without involving a client? Run the bundled sm
 npm run smoke
 ```
 
-It boots the server in a throwaway sandbox and asserts 25 behaviours — every mutating path, the dry-run guarantee, the path guards, and the vendor-field round-trip. `npm run verify` runs the typecheck first, then the smoke test.
+It boots the server in a throwaway sandbox and asserts 37 behaviours — every mutating path, the dry-run guarantee, the path guards, and the vendor-field round-trip. `npm run verify` runs the typecheck first, then the smoke test.
 
 ---
 

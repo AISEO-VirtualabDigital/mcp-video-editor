@@ -23,6 +23,17 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 
 **59 tools total**, all of which honor `dryRun: true` by default (the safe setting).
 
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [Getting Started](./docs/GETTING-STARTED.md) | Install on Windows or Unix, both installers, manual registration for all 8 clients, the runtime contract, env vars, troubleshooting. **Start here.** |
+| [Client Setup](./docs/CLIENT_SETUP.md) | Per-client reference: config paths, exact file formats (JSON / JSONC / TOML), verification commands. |
+| [Tool Reference](./docs/TOOLS.md) | All 59 tools with arguments, returns, and notes on what is experimental. |
+| [Architecture](./docs/ARCHITECTURE.md) | Read/write data flow, the normalized `EditorProject` shape, vendor-field preservation, safety guarantees, verification. |
+| [Security](./docs/SECURITY.md) | Threat model, path guards, the refusal matrix, resolved findings, residual risks. |
+| [Changelog](./CHANGELOG.md) | What changed in each version, including the honest notes on what is untested. |
+
 ## What's new
 
 ### 1.2.0 — write path, typing, onboarding
@@ -36,7 +47,7 @@ No new tools (still **59**). This release makes saves cheaper and types honest.
 | Dry-run | Preview snapshots are opt-in (`MCP_VIDEO_DRY_RUN_SNAPSHOT=1`); each dry-run used to write a full copy of the project |
 | OpenCut | Unmodelled vendor fields now round-trip at root/track/clip/material/text/effect level instead of being dropped |
 | Types | New `src/adapters/raw.ts` guards; explicit casts 12 → 6, the two remaining are centralized vendor-root widenings |
-| Tooling | `npm run smoke` (25 checks) and `npm run verify` (typecheck + smoke); new [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) |
+| Tooling | `npm run smoke` (37 checks incl. the full path-guard matrix) and `npm run verify` (typecheck + smoke); new [`docs/GETTING-STARTED.md`](./docs/GETTING-STARTED.md) |
 
 ### 1.1.0 features
 
@@ -172,7 +183,7 @@ mcp-video-editor/
 ├── src/
 │   ├── index.ts                 # Entry point
 │   ├── server.ts                # MCP server setup + tool registration
-│   ├── tools/                   # 59 tools across 13 modules
+│   ├── tools/                   # 59 tools across 11 tool modules
 │   │   ├── index.ts              # Tool registry
 │   │   ├── project.ts           # list/create/open/close/save/duplicate/delete
 │   │   ├── timeline.ts          # tracks, clips, splits, trims, speed, volume, visibility
@@ -213,7 +224,7 @@ mcp-video-editor/
 ├── scripts/
 │   ├── install-windows.ps1      # Windows installer
 │   ├── install-unix.sh          # macOS/Linux fallback
-│   └── smoke.mjs                # 25-check end-to-end smoke test
+│   └── smoke.mjs                # 37-check end-to-end smoke test
 └── docs/
     ├── GETTING-STARTED.md
     ├── ARCHITECTURE.md
@@ -229,7 +240,7 @@ npm run build        # tsc -> dist/
 npm run typecheck    # tsc --noEmit
 npm run dev          # run via tsx (no build step)
 npm run inspect      # launch with MCP inspector (requires npx mcp-inspector)
-npm run smoke        # build + 25-check end-to-end smoke test (throwaway sandbox)
+npm run smoke        # build + 37-check end-to-end smoke test (throwaway sandbox)
 npm run verify       # typecheck, then smoke
 ```
 
@@ -245,7 +256,7 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 ## Limitations & notes
 
 - **CapCut has no official API.** This server reads/writes CapCut's `draft_content.json` directly. CapCut must be **closed** (or at least not actively editing the same draft) when you call `save_project` with `dryRun: false`, otherwise the file may be locked — the server retries 3× on `EBUSY` but may still fail.
-- **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw`, so round-tripping older drafts is generally safe, but new CapCut-only fields may be ignored on write.
+- **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw` at both the document root and per track/clip/material/text/effect node, so round-tripping older drafts is generally safe — but a field CapCut adds that lands outside a node we recognize still has no home, and a version that renames existing fields outright will read as missing data.
 - **OpenCut schema.** OpenCut's project format is still evolving. The adapter tolerates both flat `tracks` and nested `timeline.tracks` shapes; the writer always emits the flat form (OpenCut ≥ 0.5).
 - **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`; the `motion` engine renders through Remotion's frame-stepping plus ffmpeg). A future backend must integrate with CapCut or OpenCut before export tasks can advance beyond queued.
 - **CapCut and OpenCut are the only editors this server reads and writes. Premiere and Filmora are NOT supported yet — the export is beta.** `export_timeline_xml` produces FCP7 XML, the format both editors document, but a real import has never been tested because we do not have Premiere or Filmora installed. Output is XML-valid and unit-tested; whether Premiere/Filmora swallow it is unconfirmed. Do not rely on it for paid work until that is verified.

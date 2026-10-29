@@ -1,5 +1,7 @@
 # mcp-video-editor
 
+[![CI](https://github.com/AISEO-VirtualabDigital/mcp-video-editor/actions/workflows/ci.yml/badge.svg)](https://github.com/AISEO-VirtualabDigital/mcp-video-editor/actions/workflows/ci.yml)
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI coding assistants edit videos in **CapCut** and **OpenCut**.
 
 Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **OpenCode**, **KiloCode**, **Qwen Code**, and **ZCode CLI** over stdio.
@@ -243,6 +245,8 @@ npm run inspect      # launch with MCP inspector (requires npx mcp-inspector)
 npm run smoke        # build + 37-check end-to-end smoke test (throwaway sandbox)
 npm run verify       # typecheck, then smoke
 ```
+
+CI runs typecheck + build + smoke on Node 18, 20 and 22 for every push to `main` and every PR (`.github/workflows/ci.yml`).
 
 Smoke-test the server locally:
 

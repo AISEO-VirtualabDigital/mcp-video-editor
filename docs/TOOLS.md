@@ -1,6 +1,6 @@
 # Tool Reference
 
-All 54 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
+All 57 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
 
 ## Project management
 
@@ -51,6 +51,8 @@ All 54 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | `remove_effect` | `id`, `effectId`, `dryRun=true` |
 | `add_sticker` | `id`, `stickerId`, `start`, `end`, `x`, `y`, `scale=1`, `dryRun=true` |
 | `add_animation` | `id`, `trackId`, `clipId`, `type`, `duration=500_000`, `side`, `dryRun=true` |
+| `list_effects` | `category?` | `{ effects, categories, count }` | Read-only; lists the video effects catalog with face-safety info |
+| `get_effect` | `effectId` | `{ effect }` | Read-only; returns a single effect (category, faceSafe, timingHint) |
 
 ## Audio
 
@@ -68,8 +70,8 @@ All 54 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 
 | Tool | Args | Returns | Notes |
 | --- | --- | --- | --- |
-| `create_video` | `name`, `editor`, `engine`, `width=1920`, `height=1080`, `fps=30`, `durationInSeconds`, `clips?`, `texts?`, `audio?`, `dryRun=true` | `{ id, name, editor, engine, duration, width, height, fps, tracks, materials, texts, filePath }` | Creates a new video project from a programmatic generation spec (Remotion or HyperFrames engine). When `engine="hyperframes"`, a `index.html` composition scaffold is written into the project folder. |
-| `render_project` | `id`, `engine`, `entry?`, `compositionId?`, `outputPath?`, `dryRun=true` | `{ taskId, projectId, engine, outputPath, phase }` | Spawns the backend renderer (`npx remotion render` or `npx hyperframes render`), streams progress, writes output under the export root. |
+| `create_video` | `name`, `editor`, `engine`, `width=1920`, `height=1080`, `fps=30`, `durationInSeconds`, `clips?`, `texts?`, `audio?`, `dryRun=true` | `{ id, name, editor, engine, duration, width, height, fps, tracks, materials, texts, filePath }` | Creates a new video project from a programmatic generation spec (Remotion / HyperFrames / Motion engine). When `engine` is `hyperframes` or `motion`, a composition scaffold is written into the project folder. |
+| `render_project` | `id`, `engine`, `entry?`, `compositionId?`, `outputPath?`, `dryRun=true` | `{ taskId, projectId, engine, outputPath, phase }` | Spawns the backend renderer (`npx remotion render` or `npx hyperframes render`; `motion` renders via frame-stepping + ffmpeg via Remotion), streams progress, writes output under the export root. |
 
 ## Shot library
 
@@ -77,6 +79,12 @@ All 54 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | --- | --- | --- | --- |
 | `list_shots` | `category?` | `{ categories, shots, count }` | Read-only; lists motion shot categories + cards |
 | `get_shot` | `shotId` | `{ shot: ShotCard }` | Read-only; returns a single shot card |
+
+## Voice synthesis
+
+| Tool | Args | Returns | Notes |
+| --- | --- | --- | --- |
+| `generate_voice` | `text`, `provider`, `voice?`, `model?`, `outputPath?`, `dryRun=true` | `{ provider, voice, model, outputPath, bytesWritten, dryRun }` | Synthesizes MP3 via OpenAI or ElevenLabs TTS; requires `OPENAI_API_KEY` / `ELEVENLABS_API_KEY`. |
 
 ## Export & render
 

@@ -16,9 +16,11 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Export & render | `list_export_profiles`, `set_export_params`, `export_project`, `get_render_status`, `list_render_tasks` | ✅ | ✅ |
 | Generation & rendering | `create_video`, `render_project` | ✅ | ✅ |
 | Shot library | `list_shots`, `get_shot` | ✅ | ✅ |
+| Voice synthesis | `generate_voice` | ✅ | ✅ |
+| Effects catalog | `list_effects`, `get_effect` | ✅ | ✅ |
 | Inspect / query | `get_project_state`, `get_timeline`, `get_clips`, `get_track_info`, `get_materials`, `get_texts`, `get_effects`, `get_open_project_ids` | ✅ | ✅ |
 
-**54 tools total**, all of which honor `dryRun: true` by default (the safe setting).
+**57 tools total**, all of which honor `dryRun: true` by default (the safe setting).
 
 ## How it works
 

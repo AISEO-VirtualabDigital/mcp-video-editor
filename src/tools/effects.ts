@@ -21,6 +21,15 @@ import { executeWrite } from "../safety/dry-run.js";
 import { bus } from "../notifications/events.js";
 import { withRetry } from "../utils/fs.js";
 import { uid } from "../utils/id.js";
+import { EFFECTS, listEffects, getEffect, type EffectCategory, type VideoEffect } from "../data/effects.js";
+
+const listEffectsSchema = z.object({
+  category: z.string().optional().describe("Filter by effect category, e.g. 'face-tracked', 'kinetic-text', 'color-grade', 'motion', 'sticker', 'ambient'. Omit to list all."),
+});
+
+const getEffectSchema = z.object({
+  effectId: z.string().min(1).describe("Effect id, e.g. 'orbit', 'locked-on', 'moody', 'comment-box'."),
+});
 
 const addTransitionSchema = z.object({
   id: z.string().min(1).describe("Project id."),
@@ -290,6 +299,38 @@ export const effectsTools: Tool[] = [
           (clip.raw as Record<string, unknown>)[key] = { type: input.type, duration: input.duration };
         },
       );
+    },
+  },
+  {
+    name: "list_effects",
+    description: "List the available video effects catalog (face-tracked, kinetic-text, color-grade, motion, sticker, ambient) with face-safety info.",
+    inputSchema: listEffectsSchema,
+    run: async (raw) => {
+      const input = listEffectsSchema.parse(raw);
+      const effects = listEffects(input.category);
+      const categories = input.category ? [...new Set(effects.map((e) => e.category))] : [...new Set(EFFECTS.map((e) => e.category))];
+      return {
+        ok: true,
+        summary: `Found ${effects.length} effect(s)${input.category ? ` in category "${input.category}"` : ""}.`,
+        data: { effects, categories, count: effects.length },
+      } satisfies ToolResult;
+    },
+  },
+  {
+    name: "get_effect",
+    description: "Get a single video effect by id, including category, face-safety, and timing hint.",
+    inputSchema: getEffectSchema,
+    run: async (raw) => {
+      const input = getEffectSchema.parse(raw);
+      const effect: VideoEffect | undefined = getEffect(input.effectId);
+      if (!effect) {
+        return { ok: false, summary: `Effect "${input.effectId}" not found.`, error: "not-found" } satisfies ToolResult;
+      }
+      return {
+        ok: true,
+        summary: `Effect "${effect.id}" (${effect.category}) — ${effect.description}`,
+        data: { effect },
+      } satisfies ToolResult;
     },
   },
 ];

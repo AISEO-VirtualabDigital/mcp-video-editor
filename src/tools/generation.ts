@@ -63,7 +63,7 @@ const createVideoAudioSchema = z.object({
 const createVideoSchema = z.object({
   name: z.string().min(1).describe("Display name for the generated video."),
   editor: z.enum(["capcut", "opencut"]).describe("Storage backend the generated timeline is written to."),
-  engine: z.enum(["remotion", "hyperframes"]).default("remotion").describe("Generation engine the spec targets: Remotion (React composition) or HyperFrames (HTML composition)."),
+  engine: z.enum(["remotion", "hyperframes", "motion"]).default("remotion").describe("Generation engine the spec targets: Remotion (React composition), HyperFrames (HTML composition), or Motion (frame-stepping animation artifact)."),
   width: z.number().int().positive().default(1920).describe("Canvas width in px."),
   height: z.number().int().positive().default(1080).describe("Canvas height in px."),
   fps: z.number().int().positive().default(30).describe("Frames per second."),
@@ -272,7 +272,7 @@ function projectDirFor(project: EditorProject): string {
 
 const renderProjectSchema = z.object({
   id: z.string().min(1).describe("Project id."),
-  engine: z.enum(["remotion", "hyperframes"]).default("hyperframes").describe("Render backend to use."),
+  engine: z.enum(["remotion", "hyperframes", "motion"]).default("hyperframes").describe("Render backend to use (motion renders via frame-stepping + ffmpeg, backed by Remotion)."),
   entry: z.string().optional().describe("Remotion entry file, e.g. 'src/index.ts'. Required for remotion renders."),
   compositionId: z.string().optional().describe("Remotion composition id. Defaults to the project name."),
   outputPath: z.string().optional().describe("Output MP4 path. Defaults to <exportRoot>/<projectName>.mp4."),
@@ -283,7 +283,7 @@ export const generationTools: Tool[] = [
   {
     name: "create_video",
     description:
-      "Create a new video project from a programmatic generation spec (composition timeline: clips, texts, audio). Author the video for the Remotion (React) or HyperFrames (HTML) engine. Honors dry-run by default.",
+      "Create a new video project from a programmatic generation spec (composition timeline: clips, texts, audio). Author the video for the Remotion (React), HyperFrames (HTML), or Motion (frame-stepping animation) engine. Honors dry-run by default.",
     inputSchema: createVideoSchema,
     run: async (raw) => {
       const input = createVideoSchema.parse(raw);
@@ -295,7 +295,7 @@ export const generationTools: Tool[] = [
       let html: string | null = null;
       try {
         project = buildGeneratedProject(input);
-        html = input.engine === "hyperframes" ? buildHyperframesHtml(project, project.name) : null;
+        html = input.engine === "hyperframes" || input.engine === "motion" ? buildHyperframesHtml(project, project.name) : null;
       } catch (err) {
         const e = err as Error;
         return { ok: false, summary: `Failed to build generated project: ${e.message}`, error: "build-failed" } satisfies ToolResult;
@@ -435,7 +435,7 @@ export const generationTools: Tool[] = [
         entry: input.entry,
         compositionId: input.compositionId,
         outputPath: outPath,
-        cwd: input.engine === "hyperframes" ? projectDirFor(project) : undefined,
+        cwd: input.engine === "hyperframes" || input.engine === "motion" ? projectDirFor(project) : undefined,
       };
       const { promise } = startRenderJob(job);
       const result = await promise;

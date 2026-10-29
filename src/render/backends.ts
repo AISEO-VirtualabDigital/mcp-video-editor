@@ -15,7 +15,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
-export type RenderEngineKind = "remotion" | "hyperframes";
+export type RenderEngineKind = "remotion" | "hyperframes" | "motion";
 
 export interface RenderJob {
   engine: RenderEngineKind;
@@ -59,7 +59,8 @@ export function buildHyperframesArgs(): string[] {
  * and the spawned process handle (for cancellation via timeout).
  */
 export function startRenderJob(job: RenderJob): { promise: Promise<RenderJobResult>; proc: ChildProcess } {
-  const args = job.engine === "remotion" ? buildRemotionArgs(job) : buildHyperframesArgs();
+  const backendEngine: RenderEngineKind = job.engine === "motion" ? "remotion" : job.engine;
+  const args = backendEngine === "remotion" ? buildRemotionArgs(job) : buildHyperframesArgs();
   const cwd = job.engine === "remotion" ? job.cwd ?? path.dirname(path.resolve(process.cwd(), job.entry ?? "src/index.ts")) : job.cwd ?? process.cwd();
   const proc = spawn("npx", args, { shell: true, stdio: ["ignore", "pipe", "pipe"], cwd });
 

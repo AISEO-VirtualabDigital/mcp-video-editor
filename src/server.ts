@@ -44,7 +44,7 @@ export function buildServer(): ServerContext {
         logging: {},
       },
       instructions:
-        "MCP server for editing videos in CapCut and OpenCut, plus programmatic video creation via Remotion/HyperFrames. All write tools default to dryRun=true — pass dryRun=false to persist. Time units are microseconds (1_000_000 = 1s). Use create_video to author a new video from a generation spec, render_project to render it to MP4, and list_shots/get_shot to browse the motion shot library.",
+        "MCP server for editing videos in CapCut and OpenCut, plus programmatic video creation via Remotion/HyperFrames, speech synthesis via OpenAI/ElevenLabs, and a video effects catalog. All write tools default to dryRun=true — pass dryRun=false to persist. Time units are microseconds (1_000_000 = 1s). Use create_video to author a new video from a generation spec, render_project to render it to MP4, list_shots/get_shot to browse the motion shot library, list_effects/get_effect to browse video effects, and generate_voice to synthesize narration audio.",
     },
   );
 

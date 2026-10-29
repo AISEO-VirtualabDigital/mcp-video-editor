@@ -16,7 +16,7 @@
                                       ▼
                 ┌─────────────────────────────────────────────────┐
                 │              Tool Registry                       │
-                │  7 categories, 50 tools total                    │
+                │  12 modules, 58 tools total                     │
                 │  Each tool: name + description + Zod input      │
                 │  schema + async run() -> ToolResult              │
                 └─────────────────────┬───────────────────────────┘

@@ -96,10 +96,10 @@ const addAnimationSchema = z.object({
 
 const applyFaceEffectSchema = z.object({
   id: z.string().min(1).describe("Project id."),
-  effectId: z.string().min(1).describe("Face-tracked effect id from the catalog, e.g. 'orbit', 'locked-on', 'noise'."),
+  effectId: z.string().min(1).describe("Effect id from the catalog, e.g. 'orbit', 'locked-on', 'noise'. Must exist — call list_effects to browse."),
   start: z.number().int().min(0).describe("Effect start, microseconds."),
   end: z.number().int().min(0).describe("Effect end, microseconds."),
-  params: z.record(z.unknown()).optional().describe("Effect params."),
+  params: z.record(z.unknown()).optional().describe("Effect params, merged over the catalog metadata."),
   dryRun: z.boolean().default(true).describe("When true, in-memory only."),
 });
 
@@ -340,6 +340,54 @@ export const effectsTools: Tool[] = [
         summary: `Effect "${effect.id}" (${effect.category}) — ${effect.description}`,
         data: { effect },
       } satisfies ToolResult;
+    },
+  },
+  {
+    name: "apply_face_effect",
+    description: "Apply a catalog effect over a timeline window (face-tracked, kinetic-text, color-grade, motion, sticker, ambient). The id is validated against the catalog and the result warns when the effect layers over the face.",
+    inputSchema: applyFaceEffectSchema,
+    run: async (raw) => {
+      const input = applyFaceEffectSchema.parse(raw);
+      const effect: VideoEffect | undefined = getEffect(input.effectId);
+      if (!effect) {
+        const near = listEffects().find((e) => e.id.includes(input.effectId));
+        return {
+          ok: false,
+          summary: `Effect "${input.effectId}" not found.${near ? ` Did you mean "${near.id}"?` : " Call list_effects to browse the catalog."}`,
+          error: "not-found",
+        } satisfies ToolResult;
+      }
+      if (input.end <= input.start) {
+        return {
+          ok: false,
+          summary: `Invalid window: end (${input.end}us) must be greater than start (${input.start}us).`,
+          error: "invalid-window",
+        } satisfies ToolResult;
+      }
+      const result = await applyEffectMutation(
+        input.id,
+        `Apply ${effect.category} effect "${effect.id}" (${input.start}-${input.end}us)`,
+        input.dryRun,
+        () => {
+          const project = facade.getOpenProject(input.id);
+          project.effects.push({
+            id: uid("fx_"),
+            type: `effect:${effect.id}`,
+            start: input.start,
+            end: input.end,
+            params: {
+              ...input.params,
+              category: effect.category,
+              faceSafe: effect.faceSafe,
+              ...(effect.timingHint ? { timingHint: effect.timingHint } : {}),
+            },
+          });
+        },
+      );
+      if (!effect.faceSafe) {
+        result.summary += ` Warning: "${effect.id}" is not face-safe — it layers over the face.`;
+      }
+      return result;
     },
   },
 ];

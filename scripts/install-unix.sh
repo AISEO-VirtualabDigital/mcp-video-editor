@@ -99,8 +99,17 @@ for client in "${client_list[@]}"; do
   fi
   [[ -f "$tmpl" ]] || { echo "Template missing: $tmpl (skipping $client)" >&2; continue; }
 
-  # Read template and substitute YOUR_USERNAME.
-  content=$(sed "s|YOUR_USERNAME|$USER_NAME|g" "$tmpl")
+  # Read template and substitute YOUR_USERNAME, rewriting the Windows-shaped
+  # paths in the templates to real ones on this machine.
+  if [[ "$OS" == "windows" ]]; then
+    content=$(sed "s|YOUR_USERNAME|$USER_NAME|g" "$tmpl")
+  else
+    content=$(cat "$tmpl")
+    content="${content//C:\\\\Users\\\\YOUR_USERNAME\\\\mcp-video-editor/$PROJECT_ROOT}"
+    content="${content//C:\\\\Users\\\\YOUR_USERNAME/$USER_HOME}"
+    content="${content//\\\\//}"
+    content=$(printf '%s' "$content" | sed "s|YOUR_USERNAME|$USER_NAME|g")
+  fi
 
   # Backup existing file.
   if [[ -f "$dest" ]]; then

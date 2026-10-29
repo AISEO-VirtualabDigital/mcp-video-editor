@@ -17,16 +17,16 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Generation & rendering | `create_video`, `render_project` | ✅ | ✅ |
 | Shot library | `list_shots`, `get_shot` | ✅ | ✅ |
 | Voice synthesis | `generate_voice` | ✅ | ✅ |
-| Effects catalog | `list_effects`, `get_effect` | ✅ | ✅ |
+| Effects catalog | `list_effects`, `get_effect`, `apply_face_effect` | ✅ | ✅ |
 | Inspect / query | `get_project_state`, `get_timeline`, `get_clips`, `get_track_info`, `get_materials`, `get_texts`, `get_effects`, `get_open_project_ids` | ✅ | ✅ |
 
-**57 tools total**, all of which honor `dryRun: true` by default (the safe setting).
+**58 tools total**, all of which honor `dryRun: true` by default (the safe setting).
 
 ## What's new
 
 | Feature | Tools | Notes |
 | --- | --- | --- |
-| Effects catalog | `list_effects`, `get_effect` | 20 curated effects across face-tracked, kinetic-text, color-grade, motion, sticker and ambient categories, each tagged with `faceSafe` and a `timingHint` |
+| Effects catalog | `list_effects`, `get_effect`, `apply_face_effect` | 20 curated effects across face-tracked, kinetic-text, color-grade, motion, sticker and ambient categories, each tagged with `faceSafe` and a `timingHint`. `apply_face_effect` validates the id, rejects empty/inverted windows, and warns when an effect is not face-safe |
 | Voice synthesis | `generate_voice` | MP3 voiceover via OpenAI (`tts-1`, `tts-1-hd`) or ElevenLabs (`eleven_multilingual_v2`), written under the export root |
 | Motion render engine | `create_video`, `render_project` | Third engine alongside Remotion and HyperFrames; scaffolds a composition folder and renders through frame-stepping + ffmpeg |
 | Shot library | `list_shots`, `get_shot` | Motion shot cards by category, for storyboard-style clip selection |
@@ -46,7 +46,7 @@ Editor support is unchanged: **CapCut and OpenCut only**. Filmora and Adobe Prem
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ mcp-video-editor (this server, Node.js)                                  │
 │   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐  │
-│   │ 57 MCP tools │ → │ adapters/   │ → │ safety/     │ → │ utils/      │  │
+│   │ 58 MCP tools │ → │ adapters/   │ → │ safety/     │ → │ utils/      │  │
 │   │ project,     │   │ capcut.ts   │   │ backup.ts   │   │ paths.ts    │  │
 │   │ timeline,    │   │ opencut.ts  │   │ validator.ts│   │ fs.ts       │  │
 │   │ text, ...    │   │ facade.ts  │   │ dry-run.ts  │   │ id.ts       │  │
@@ -152,7 +152,7 @@ mcp-video-editor/
 ├── src/
 │   ├── index.ts                 # Entry point
 │   ├── server.ts                # MCP server setup + tool registration
-│   ├── tools/                   # 57 tools across 12 modules
+│   ├── tools/                   # 58 tools across 12 modules
 │   │   ├── index.ts              # Tool registry
 │   │   ├── project.ts           # list/create/open/close/save/duplicate/delete
 │   │   ├── timeline.ts          # tracks, clips, splits, trims, speed, volume, visibility
@@ -223,7 +223,7 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`; the `motion` engine renders through Remotion's frame-stepping plus ffmpeg). A future backend must integrate with CapCut or OpenCut before export tasks can advance beyond queued.
 - **Only CapCut and OpenCut are supported editors.** Filmora (`.wfp`) and Adobe Premiere are not implemented. Premiere has no editable project file to write — it needs a UXP/CEP plugin bridge into a running app — and Filmora's project format is undocumented. Both would need a new adapter plus validator rules, not just a config entry.
 - **`generate_voice` needs credentials and network.** It calls OpenAI or ElevenLabs directly; with `dryRun: true` (the default) nothing is synthesized.
-- **Face-tracked effects are catalog-only right now.** `list_effects` / `get_effect` describe effects such as `locked-on` and `orbit`, but no `apply_face_effect` tool is registered yet.
+- **`apply_face_effect` writes timeline data, not pixels.** It appends an `effect:<id>` entry (window + catalog metadata incl. `faceSafe`) to the project, so the editor or renderer still has to draw the effect. No face-tracking model runs in this server.
 - **No UI automation.** If you need to drive CapCut's GUI (open menus, click filters), pair this server with a UI-automation layer (AutoHotkey on Windows).
 
 ## License

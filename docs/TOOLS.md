@@ -1,6 +1,6 @@
 # Tool Reference
 
-All 57 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
+All 58 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
 
 ## Project management
 
@@ -53,6 +53,7 @@ All 57 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | `add_animation` | `id`, `trackId`, `clipId`, `type`, `duration=500_000`, `side`, `dryRun=true` |
 | `list_effects` | `category?` | `{ effects, categories, count }` | Read-only; lists the video effects catalog with face-safety info |
 | `get_effect` | `effectId` | `{ effect }` | Read-only; returns a single effect (category, faceSafe, timingHint) |
+| `apply_face_effect` | `id`, `effectId`, `start`, `end`, `params?`, `dryRun=true` | Cache update + `{ projectId, dryRun }` | Validates `effectId` against the catalog, rejects `end <= start`, appends `effect:<id>` with catalog metadata, warns when `faceSafe` is false |
 
 ## Audio
 

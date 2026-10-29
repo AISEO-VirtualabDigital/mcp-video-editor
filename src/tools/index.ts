@@ -23,6 +23,7 @@ import { inspectTools } from "./inspect.js";
 import { generationTools } from "./generation.js";
 import { shotsTools } from "./shots.js";
 import { voiceTools } from "./voice.js";
+import { exchangeTools } from "./exchange.js";
 
 export interface Tool<S extends z.ZodTypeAny = z.ZodTypeAny> {
   name: string;
@@ -43,6 +44,7 @@ export const allTools: Tool[] = [
   ...generationTools,
   ...shotsTools,
   ...voiceTools,
+  ...exchangeTools,
 ];
 
 /** Lookup helper. */

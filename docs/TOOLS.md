@@ -1,6 +1,6 @@
 # Tool Reference
 
-All 58 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
+All 59 tools exposed by the MCP server. Time units are microseconds (`1_000_000 = 1s`).
 
 ## Project management
 
@@ -86,6 +86,14 @@ All 58 tools exposed by the MCP server. Time units are microseconds (`1_000_000 
 | Tool | Args | Returns | Notes |
 | --- | --- | --- | --- |
 | `generate_voice` | `text`, `provider`, `voice?`, `model?`, `outputPath?`, `dryRun=true` | `{ provider, voice, model, outputPath, bytesWritten, dryRun }` | Synthesizes MP3 via OpenAI or ElevenLabs TTS; requires `OPENAI_API_KEY` / `ELEVENLABS_API_KEY`. |
+
+## Timeline exchange (Premiere / Filmora)
+
+| Tool | Args | Returns | Notes |
+| --- | --- | --- | --- |
+| `export_timeline_xml` | `id`, `target=generic` (`premiere`/`filmora`/`generic`), `fps?`, `outputPath?`, `dryRun=true` | `{ projectId, target, outputPath, bytes, stats, warnings }` | Writes FCP7 XML (xmeml v4) into the export root. Video + audio clips, media paths, volume levels and track visibility survive. Text, stickers, effects, transitions and speed ramps are skipped and reported in `warnings`. |
+
+Import it with **File > Import** in Premiere (sequence lands in the bin) or **Import > Timeline Exchange Format XML** in Filmora (relink media if prompted).
 
 ## Export & render
 

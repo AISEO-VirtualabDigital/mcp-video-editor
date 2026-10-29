@@ -18,9 +18,10 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Shot library | `list_shots`, `get_shot` | ✅ | ✅ |
 | Voice synthesis | `generate_voice` | ✅ | ✅ |
 | Effects catalog | `list_effects`, `get_effect`, `apply_face_effect` | ✅ | ✅ |
+| Timeline exchange | `export_timeline_xml` | ✅ | ✅ |
 | Inspect / query | `get_project_state`, `get_timeline`, `get_clips`, `get_track_info`, `get_materials`, `get_texts`, `get_effects`, `get_open_project_ids` | ✅ | ✅ |
 
-**58 tools total**, all of which honor `dryRun: true` by default (the safe setting).
+**59 tools total**, all of which honor `dryRun: true` by default (the safe setting).
 
 ## What's new
 
@@ -31,6 +32,7 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 | Motion render engine | `create_video`, `render_project` | Third engine alongside Remotion and HyperFrames; scaffolds a composition folder and renders through frame-stepping + ffmpeg |
 | Shot library | `list_shots`, `get_shot` | Motion shot cards by category, for storyboard-style clip selection |
 | New clients | — | Qwen Code and ZCode CLI configs added (`configs/qwen-config.json`, `configs/zcode-config.json`) |
+| Premiere + Filmora export | `export_timeline_xml` | Writes FCP7 XML (xmeml v4), the exchange format Adobe Premiere and Wondershare Filmora both import. Clips, media paths and volume survive; text, effects and transitions are reported as warnings |
 
 Editor support is unchanged: **CapCut and OpenCut only**. Filmora and Adobe Premiere are not supported — see [Limitations & notes](#limitations--notes).
 
@@ -46,7 +48,7 @@ Editor support is unchanged: **CapCut and OpenCut only**. Filmora and Adobe Prem
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ mcp-video-editor (this server, Node.js)                                  │
 │   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐  │
-│   │ 58 MCP tools │ → │ adapters/   │ → │ safety/     │ → │ utils/      │  │
+│   │ 59 MCP tools │ → │ adapters/   │ → │ safety/     │ → │ utils/      │  │
 │   │ project,     │   │ capcut.ts   │   │ backup.ts   │   │ paths.ts    │  │
 │   │ timeline,    │   │ opencut.ts  │   │ validator.ts│   │ fs.ts       │  │
 │   │ text, ...    │   │ facade.ts  │   │ dry-run.ts  │   │ id.ts       │  │
@@ -152,7 +154,7 @@ mcp-video-editor/
 ├── src/
 │   ├── index.ts                 # Entry point
 │   ├── server.ts                # MCP server setup + tool registration
-│   ├── tools/                   # 58 tools across 12 modules
+│   ├── tools/                   # 59 tools across 13 modules
 │   │   ├── index.ts              # Tool registry
 │   │   ├── project.ts           # list/create/open/close/save/duplicate/delete
 │   │   ├── timeline.ts          # tracks, clips, splits, trims, speed, volume, visibility
@@ -163,10 +165,13 @@ mcp-video-editor/
 │   │   ├── generation.ts        # create_video, render_project (Remotion / HyperFrames / motion)
 │   │   ├── shots.ts             # motion shot library
 │   │   ├── voice.ts             # generate_voice (OpenAI / ElevenLabs TTS)
+│   │   ├── exchange.ts          # export_timeline_xml (Premiere / Filmora)
 │   │   └── inspect.ts           # read-only project state queries
 │   ├── data/
 │   │   ├── effects.ts           # 20-effect catalog with face-safety + timing hints
 │   │   └── shots.ts             # motion shot cards
+│   ├── export/
+│   │   └── xmeml.ts             # FCP7 XML (xmeml v4) builder for Premiere + Filmora
 │   ├── render/
 │   │   └── backends.ts          # Remotion / HyperFrames / motion render spawning
 │   ├── tts/
@@ -221,7 +226,8 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw`, so round-tripping older drafts is generally safe, but new CapCut-only fields may be ignored on write.
 - **OpenCut schema.** OpenCut's project format is still evolving. The adapter tolerates both flat `tracks` and nested `timeline.tracks` shapes; the writer always emits the flat form (OpenCut ≥ 0.5).
 - **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`; the `motion` engine renders through Remotion's frame-stepping plus ffmpeg). A future backend must integrate with CapCut or OpenCut before export tasks can advance beyond queued.
-- **Only CapCut and OpenCut are supported editors.** Filmora (`.wfp`) and Adobe Premiere are not implemented. Premiere has no editable project file to write — it needs a UXP/CEP plugin bridge into a running app — and Filmora's project format is undocumented. Both would need a new adapter plus validator rules, not just a config entry.
+- **CapCut and OpenCut are the only editors this server reads and writes.** Premiere and Filmora are supported one way only, as *import* targets: `export_timeline_xml` produces FCP7 XML, then you bring it in with File > Import (Premiere) or Timeline Exchange Format XML (Filmora). Native project-file support for either would need a running app plus a plugin bridge (Premiere UXP/CEP) or reverse-engineered format (Filmora's `.wfp`) — different architecture, not an adapter tweak.
+- **xmeml drops things.** Text overlays, stickers, generic effects, transitions and speed ramps do not survive the exchange format; `export_timeline_xml` lists exactly what it skipped in its warnings. Audio is exported at 48 kHz with clip volume mapped to an Audio Levels filter.
 - **`generate_voice` needs credentials and network.** It calls OpenAI or ElevenLabs directly; with `dryRun: true` (the default) nothing is synthesized.
 - **`apply_face_effect` writes timeline data, not pixels.** It appends an `effect:<id>` entry (window + catalog metadata incl. `faceSafe`) to the project, so the editor or renderer still has to draw the effect. No face-tracking model runs in this server.
 - **No UI automation.** If you need to drive CapCut's GUI (open menus, click filters), pair this server with a UI-automation layer (AutoHotkey on Windows).

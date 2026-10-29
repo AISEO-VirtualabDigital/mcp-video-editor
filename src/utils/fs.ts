@@ -52,6 +52,14 @@ export async function writeJson(filePath: string, value: unknown, pretty = true)
   await fs.rename(tmpPath, filePath);
 }
 
+/** Write a text file atomically (temp file + rename). */
+export async function writeText(filePath: string, content: string): Promise<void> {
+  await ensureDir(path.dirname(filePath));
+  const tmpPath = `${filePath}.${nanoid(8)}.tmp`;
+  await fs.writeFile(tmpPath, content, "utf-8");
+  await fs.rename(tmpPath, filePath);
+}
+
 /** Copy a file. Returns the destination path. */
 export async function copyFile(src: string, dest: string): Promise<string> {
   await ensureDir(path.dirname(dest));

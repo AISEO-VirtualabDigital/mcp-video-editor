@@ -21,6 +21,8 @@
 .PARAMETER Clients
   Comma-separated list of clients to install for.
   Default: cursor,claude,codex,antigravity,opencode,kilo
+  Qwen Code (qwen) and ZCode (zcode) are accepted but never written — their
+  config files hold unrelated settings, so the script prints the merge target.
   Example: -Clients "cursor,claude"
 
 .EXAMPLE
@@ -107,11 +109,28 @@ $ClientRecipes = @{
   }
 }
 
+# Clients whose config file also holds unrelated settings — never overwrite these.
+$ManualRecipes = @{
+  qwen = @{
+    ConfigPath = Join-Path $env:USERPROFILE ".qwen\settings.json"
+    Template   = Join-Path $ProjectRoot "configs\qwen-config.json"
+  }
+  zcode = @{
+    ConfigPath = Join-Path $env:USERPROFILE ".zcode\cli\setting.json"
+    Template   = Join-Path $ProjectRoot "configs\zcode-config.json"
+  }
+}
+
 # 5. Token replacement: the configs use "YOUR_USERNAME" as a placeholder for
 #    the current user's home directory.
 $Selected = $Clients -split "," | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }
 
 foreach ($client in $Selected) {
+  if ($ManualRecipes.ContainsKey($client)) {
+    $m = $ManualRecipes[$client]
+    Write-Warning "Manual merge required for $client`: merge $($m.Template) into $($m.ConfigPath) (existing file holds other settings — not overwritten)."
+    continue
+  }
   if (-not $ClientRecipes.ContainsKey($client)) {
     Write-Warning "Unknown client: $client (skipping)"
     continue
@@ -170,5 +189,6 @@ if (-not $probe.HasExited) {
 Write-Host "`n==> Done!" -ForegroundColor Cyan
 Write-Host "Next steps:"
 Write-Host "  1. Restart each AI client (Cursor, Claude Desktop, Codex, Antigravity, OpenCode, KiloCode)."
+Write-Host "     Qwen Code and ZCode CLI were not written — merge their templates by hand (see docs/CLIENT_SETUP.md)."
 Write-Host "  2. In each client, run a list_projects tool call to confirm connectivity."
 Write-Host "  3. Open a CapCut or OpenCut project and try add_video_clip / add_text."

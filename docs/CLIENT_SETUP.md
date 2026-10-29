@@ -1,6 +1,6 @@
 # Client Setup Guide
 
-Each of the 6 supported AI clients connects to the same MCP server over stdio. The config snippets differ only in the file format (JSON vs TOML vs JSONC) and the location of the config file.
+Each of the 8 supported AI clients connects to the same MCP server over stdio. The config snippets differ only in the file format (JSON vs TOML vs JSONC) and the location of the config file.
 
 This guide assumes you've already run `npm install && npm run build` in the project root so `dist/index.js` exists.
 
@@ -160,6 +160,61 @@ Kilo uses JSONC (comments allowed) with the standard `mcpServers` shape plus a f
 
 To skip the per-tool-call approval prompt, add tool names to `alwaysAllow` (e.g. `["list_projects", "get_project_state", "get_timeline"]` for read-only tools).
 
+## 7. Qwen Code
+
+Qwen Code (the Alibaba CLI, a Gemini CLI fork) reads MCP config from `~/.qwen/settings.json` on macOS/Linux or `%USERPROFILE%\.qwen\settings.json` on Windows.
+
+The file uses the Gemini-style `mcpServers` key:
+
+```json
+{
+  "mcpServers": {
+    "video-editor": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-video-editor/dist/index.js"],
+      "env": {
+        "MCP_VIDEO_BACKUP_DIR": "/home/you/.mcp-video-editor/backups"
+      },
+      "timeout": 60000
+    }
+  }
+}
+```
+
+That file holds other Qwen settings too, so merge the `mcpServers` block rather than overwriting it. The CLI can do the merge itself:
+
+```bash
+qwen mcp add -s user -t stdio video-editor node /absolute/path/to/mcp-video-editor/dist/index.js
+qwen mcp list          # video-editor should appear
+```
+
+Use `-e KEY=value` for env vars and `--trust` to skip tool-call confirmation in a trusted workspace.
+
+## 8. ZCode CLI
+
+ZCode CLI reads MCP config from the `setting.json` in its CLI directory — `~/.zcode/cli/setting.json` (`%USERPROFILE%\.zcode\cli\setting.json` on Windows).
+
+Servers live under the top-level `mcp.servers` object, and `features.mcp` must be `true`:
+
+```json
+{
+  "features": { "mcp": true },
+  "mcp": {
+    "servers": {
+      "video-editor": {
+        "type": "stdio",
+        "command": "node",
+        "args": ["/absolute/path/to/mcp-video-editor/dist/index.js"],
+        "env": { "MCP_VIDEO_BACKUP_DIR": "/home/you/.mcp-video-editor/backups" },
+        "timeoutMs": 60000
+      }
+    }
+  }
+}
+```
+
+Merge this into your existing `setting.json` — it also holds `permission`, `plugins` and `hooks`. Use `timeoutMs` (not `timeout`). Restart ZCode afterwards; the runtime reads the file once at startup. Provider/model settings are separate, in `~/.zcode/v2/provider_config.json`.
+
 ## Verifying the connection
 
 After wiring up any client, restart it and try one of:
@@ -170,6 +225,8 @@ After wiring up any client, restart it and try one of:
 - **Antigravity**: open the MCP store, the `video-editor` server should show "Connected".
 - **OpenCode**: `opencode mcp list` should show `video-editor`.
 - **KiloCode**: the MCP panel should show a green dot next to `video-editor`.
+- **Qwen Code**: `qwen mcp list` should list `video-editor` as connected.
+- **ZCode CLI**: ask it to run `list_projects`; a refused/unknown-tool reply means `features.mcp` or `mcp.servers` didn't load.
 
 If any client shows "Failed to connect":
 

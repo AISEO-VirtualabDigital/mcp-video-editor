@@ -1,0 +1,20 @@
+{
+  "features": {
+    "mcp": true
+  },
+  "mcp": {
+    "servers": {
+      "video-editor": {
+        "type": "stdio",
+        "command": "node",
+        "args": ["C:\\Users\\YOUR_USERNAME\\mcp-video-editor\\dist\\index.js"],
+        "env": {
+          "MCP_VIDEO_BACKUP_DIR": "C:\\Users\\YOUR_USERNAME\\.mcp-video-editor\\backups",
+          "MCP_VIDEO_EXPORT_DIR": "C:\\Users\\YOUR_USERNAME\\Videos\\mcp-video-editor",
+          "OPENCUT_PROJECTS_DIR": "C:\\Users\\YOUR_USERNAME\\Documents\\OpenCut\\projects"
+        },
+        "timeoutMs": 60000
+      }
+    }
+  }
+}

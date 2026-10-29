@@ -65,6 +65,11 @@ CONFIG_PATHS[antigravity]="$USER_HOME/.gemini/config/mcp_config.json"
 CONFIG_PATHS[opencode]="$CONFIG_HOME/opencode/opencode.json"
 CONFIG_PATHS[kilo]="$CONFIG_HOME/kilo/kilo.jsonc"
 
+# Clients whose config file also holds unrelated settings — never overwrite these.
+declare -A MANUAL_PATHS
+MANUAL_PATHS[qwen]="$USER_HOME/.qwen/settings.json"
+MANUAL_PATHS[zcode]="$USER_HOME/.zcode/cli/setting.json"
+
 declare -A TEMPLATE_PATHS
 TEMPLATE_PATHS[cursor]="$PROJECT_ROOT/configs/cursor-mcp.json"
 TEMPLATE_PATHS[claude]="$PROJECT_ROOT/configs/claude-desktop-config.json"
@@ -82,6 +87,12 @@ for client in "${client_list[@]}"; do
 
   tmpl="${TEMPLATE_PATHS[$client]:-}"
   dest="${CONFIG_PATHS[$client]:-}"
+
+  if [[ -n "${MANUAL_PATHS[$client]:-}" ]]; then
+    echo "Manual merge required for $client: merge $(basename "$PROJECT_ROOT")/configs/$client-config.json into ${MANUAL_PATHS[$client]}"
+    continue
+  fi
+
   if [[ -z "$tmpl" || -z "$dest" ]]; then
     echo "Unknown client: $client (skipping)" >&2
     continue
@@ -125,5 +136,6 @@ echo ""
 echo "==> Done!"
 echo "Next steps:"
 echo "  1. Restart each AI client (Cursor, Claude Desktop, Codex, Antigravity, OpenCode, KiloCode)."
+echo "     Qwen Code and ZCode CLI were not written — merge their templates by hand (see docs/CLIENT_SETUP.md)."
 echo "  2. In each client, call list_projects with editor=capcut to verify."
 echo "  3. Open a CapCut or OpenCut project and try add_video_clip / add_text."

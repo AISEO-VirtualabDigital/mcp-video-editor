@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI coding assistants edit videos in **CapCut** and **OpenCut**.
 
-Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **OpenCode**, and **KiloCode** over stdio.
+Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **OpenCode**, **KiloCode**, **Qwen Code**, and **ZCode CLI** over stdio.
 
 ## What it does
 
@@ -22,18 +22,31 @@ Connects to **Cursor**, **Claude Desktop**, **Codex CLI**, **Antigravity**, **Op
 
 **57 tools total**, all of which honor `dryRun: true` by default (the safe setting).
 
+## What's new
+
+| Feature | Tools | Notes |
+| --- | --- | --- |
+| Effects catalog | `list_effects`, `get_effect` | 20 curated effects across face-tracked, kinetic-text, color-grade, motion, sticker and ambient categories, each tagged with `faceSafe` and a `timingHint` |
+| Voice synthesis | `generate_voice` | MP3 voiceover via OpenAI (`tts-1`, `tts-1-hd`) or ElevenLabs (`eleven_multilingual_v2`), written under the export root |
+| Motion render engine | `create_video`, `render_project` | Third engine alongside Remotion and HyperFrames; scaffolds a composition folder and renders through frame-stepping + ffmpeg |
+| Shot library | `list_shots`, `get_shot` | Motion shot cards by category, for storyboard-style clip selection |
+| New clients | — | Qwen Code and ZCode CLI configs added (`configs/qwen-config.json`, `configs/zcode-config.json`) |
+
+Editor support is unchanged: **CapCut and OpenCut only**. Filmora and Adobe Premiere are not supported — see [Limitations & notes](#limitations--notes).
+
 ## How it works
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ AI Client (Cursor / Claude / Codex / Antigravity / OpenCode / KiloCode)  │
+│ Client (Cursor / Claude / Codex / Antigravity / OpenCode / Kilo / Qwen / │
+│ ZCode)                                                                   │
 └───────────────────────────────────┬──────────────────────────────────────┘
                                     │ JSON-RPC 2.0 over stdio (MCP)
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ mcp-video-editor (this server, Node.js)                                  │
 │   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐  │
-│   │ 50 MCP tools │ → │ adapters/   │ → │ safety/     │ → │ utils/      │  │
+│   │ 57 MCP tools │ → │ adapters/   │ → │ safety/     │ → │ utils/      │  │
 │   │ project,     │   │ capcut.ts   │   │ backup.ts   │   │ paths.ts    │  │
 │   │ timeline,    │   │ opencut.ts  │   │ validator.ts│   │ fs.ts       │  │
 │   │ text, ...    │   │ facade.ts  │   │ dry-run.ts  │   │ id.ts       │  │
@@ -65,7 +78,8 @@ cd C:\Users\you\mcp-video-editor
 npm install
 npm run build
 
-# 3. Run the installer — it writes configs into all 6 AI clients
+# 3. Run the installer — it writes configs into all 6 JSON/TOML clients
+#    (Qwen Code and ZCode are printed as manual-merge targets)
 pwsh -File scripts/install-windows.ps1
 # Or install for just Cursor + Claude:
 pwsh -File scripts/install-windows.ps1 -Clients "cursor,claude"
@@ -95,8 +109,12 @@ If you'd rather wire up clients by hand, copy the relevant snippet from [`config
 | Antigravity | `%USERPROFILE%\.gemini\config\mcp_config.json` | [`configs/antigravity-mcp_config.json`](./configs/antigravity-mcp_config.json) |
 | OpenCode | `%USERPROFILE%\.config\opencode\opencode.json` | [`configs/opencode.json`](./configs/opencode.json) |
 | KiloCode | `%USERPROFILE%\.config\kilo\kilo.jsonc` | [`configs/kilo-kilo.jsonc`](./configs/kilo-kilo.jsonc) |
+| Qwen Code | `%USERPROFILE%\.qwen\settings.json` | [`configs/qwen-config.json`](./configs/qwen-config.json) |
+| ZCode CLI | `%USERPROFILE%\.zcode\cli\setting.json` | [`configs/zcode-config.json`](./configs/zcode-config.json) |
 
-Replace `YOUR_USERNAME` in the snippets with your Windows username (the installer does this for you).
+Qwen Code and ZCode keep other settings in those same files, so **merge** the `mcpServers` / `mcp.servers` block into the existing file instead of overwriting it. The installers skip both clients for that reason and print the merge target instead.
+
+Replace `YOUR_USERNAME` in the snippets with your Windows username (the installer does this for you). The Qwen and ZCode snippets above are Windows-shaped; on macOS/Linux swap the `C:\\Users\\...` paths for real ones.
 
 ## Environment variables
 
@@ -108,6 +126,8 @@ Override default locations if you keep your projects elsewhere.
 | `MCP_VIDEO_EXPORT_DIR` | `%USERPROFILE%\Videos\mcp-video-editor` | Where renders + task JSONs are written |
 | `MCP_VIDEO_CACHE_DIR` | `%USERPROFILE%\.mcp-video-editor\cache` | Dry-run preview snapshots |
 | `OPENCUT_PROJECTS_DIR` | `%USERPROFILE%\Documents\OpenCut\projects` | OpenCut project root |
+| `OPENAI_API_KEY` | — | Required by `generate_voice` with `provider: "openai"` |
+| `ELEVENLABS_API_KEY` | — | Required by `generate_voice` with `provider: "elevenlabs"` |
 
 ## Sample conversation
 
@@ -132,15 +152,25 @@ mcp-video-editor/
 ├── src/
 │   ├── index.ts                 # Entry point
 │   ├── server.ts                # MCP server setup + tool registration
-│   ├── tools/                   # 54 tools across 9 categories
+│   ├── tools/                   # 57 tools across 12 modules
 │   │   ├── index.ts              # Tool registry
 │   │   ├── project.ts           # list/create/open/close/save/duplicate/delete
 │   │   ├── timeline.ts          # tracks, clips, splits, trims, speed, volume, visibility
 │   │   ├── text.ts              # text overlays, styling, positioning
-│   │   ├── effects.ts           # transitions, filters, effects, stickers, animations
+│   │   ├── effects.ts           # transitions, filters, effects, stickers, animations, effect catalog
 │   │   ├── audio.ts             # audio clips, fade in/out, denoise
 │   │   ├── export.ts            # export profiles, render queue, status polling
+│   │   ├── generation.ts        # create_video, render_project (Remotion / HyperFrames / motion)
+│   │   ├── shots.ts             # motion shot library
+│   │   ├── voice.ts             # generate_voice (OpenAI / ElevenLabs TTS)
 │   │   └── inspect.ts           # read-only project state queries
+│   ├── data/
+│   │   ├── effects.ts           # 20-effect catalog with face-safety + timing hints
+│   │   └── shots.ts             # motion shot cards
+│   ├── render/
+│   │   └── backends.ts          # Remotion / HyperFrames / motion render spawning
+│   ├── tts/
+│   │   └── backends.ts          # OpenAI + ElevenLabs speech synthesis
 │   ├── adapters/
 │   │   ├── types.ts             # EditorProject normalized shape
 │   │   ├── capcut.ts            # CapCut draft_content.json reader/writer
@@ -190,7 +220,10 @@ You should see a JSON-RPC response with `serverInfo: { name: "mcp-video-editor",
 - **CapCut has no official API.** This server reads/writes CapCut's `draft_content.json` directly. CapCut must be **closed** (or at least not actively editing the same draft) when you call `save_project` with `dryRun: false`, otherwise the file may be locked — the server retries 3× on `EBUSY` but may still fail.
 - **CapCut version drift.** CapCut changes its draft schema across versions. The adapter preserves unknown fields via `raw`, so round-tripping older drafts is generally safe, but new CapCut-only fields may be ignored on write.
 - **OpenCut schema.** OpenCut's project format is still evolving. The adapter tolerates both flat `tracks` and nested `timeline.tracks` shapes; the writer always emits the flat form (OpenCut ≥ 0.5).
-- **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`). A future backend must integrate with CapCut or OpenCut before tasks can advance beyond queued.
+- **Export is not actually rendering.** `export_project` records a queued request and emits a queued `renderProgress` notification, but no renderer is connected and no video file is created. `render_project` is the backend-driven render path that spawns a real renderer (`npx remotion render` or `npx hyperframes render`; the `motion` engine renders through Remotion's frame-stepping plus ffmpeg). A future backend must integrate with CapCut or OpenCut before export tasks can advance beyond queued.
+- **Only CapCut and OpenCut are supported editors.** Filmora (`.wfp`) and Adobe Premiere are not implemented. Premiere has no editable project file to write — it needs a UXP/CEP plugin bridge into a running app — and Filmora's project format is undocumented. Both would need a new adapter plus validator rules, not just a config entry.
+- **`generate_voice` needs credentials and network.** It calls OpenAI or ElevenLabs directly; with `dryRun: true` (the default) nothing is synthesized.
+- **Face-tracked effects are catalog-only right now.** `list_effects` / `get_effect` describe effects such as `locked-on` and `orbit`, but no `apply_face_effect` tool is registered yet.
 - **No UI automation.** If you need to drive CapCut's GUI (open menus, click filters), pair this server with a UI-automation layer (AutoHotkey on Windows).
 
 ## License

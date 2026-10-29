@@ -94,6 +94,15 @@ const addAnimationSchema = z.object({
   dryRun: z.boolean().default(true).describe("When true, in-memory only."),
 });
 
+const applyFaceEffectSchema = z.object({
+  id: z.string().min(1).describe("Project id."),
+  effectId: z.string().min(1).describe("Face-tracked effect id from the catalog, e.g. 'orbit', 'locked-on', 'noise'."),
+  start: z.number().int().min(0).describe("Effect start, microseconds."),
+  end: z.number().int().min(0).describe("Effect end, microseconds."),
+  params: z.record(z.unknown()).optional().describe("Effect params."),
+  dryRun: z.boolean().default(true).describe("When true, in-memory only."),
+});
+
 async function applyEffectMutation(
   projectId: string,
   description: string,
